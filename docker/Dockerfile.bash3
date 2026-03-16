@@ -1,0 +1,22 @@
+# Dockerfile.bash3 — bash 3.2 (simulates macOS default)
+#
+# Multi-stage: pull the pre-compiled bash 3.2 binary from the official bash
+# Docker image (Alpine 3.x build), then re-base onto Alpine 3.18 so Python 3.11
+# is available for integration tests.
+#
+# ncurses: bash:3.2 was built against libncurses.so.5; Alpine 3.18 ships .so.6.
+# The symlinks below make the old binary find its dependency.
+
+FROM bash:3.2 AS bash3_bin
+
+FROM alpine:3.18
+RUN apk add --no-cache python3 ncurses-libs \
+    && ln -sf /usr/lib/libncurses.so.6  /usr/lib/libncurses.so.5  2>/dev/null || true \
+    && ln -sf /usr/lib/libtinfo.so.6    /usr/lib/libtinfo.so.5    2>/dev/null || true
+
+COPY --from=bash3_bin /usr/local/bin/bash /usr/local/bin/bash
+RUN ln -sf /usr/local/bin/bash /bin/bash
+
+WORKDIR /ptyunit
+COPY . .
+CMD ["bash", "run.sh"]

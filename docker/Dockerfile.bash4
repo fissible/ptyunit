@@ -1,0 +1,19 @@
+# Dockerfile.bash4 — bash 4.4
+#
+# Multi-stage: pull the pre-compiled bash 4.4 binary from the official bash
+# Docker image (Alpine 3.x build), then re-base onto Alpine 3.18 so Python 3.11
+# is available for integration tests.
+#
+# bash:4.4 was built against libncurses.so.6, same as Alpine 3.18 — no shim needed.
+
+FROM bash:4.4 AS bash4_bin
+
+FROM alpine:3.18
+RUN apk add --no-cache python3 ncurses-libs
+
+COPY --from=bash4_bin /usr/local/bin/bash /usr/local/bin/bash
+RUN ln -sf /usr/local/bin/bash /bin/bash
+
+WORKDIR /ptyunit
+COPY . .
+CMD ["bash", "run.sh"]
