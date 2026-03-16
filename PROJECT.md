@@ -158,7 +158,7 @@ ptyunit/
 ├── examples/
 │   ├── confirm.sh                   # minimal yes/no prompt demo
 │   └── menu.sh                      # minimal arrow-key menu demo
-├── tests/
+├── self-tests/                      # ptyunit's own tests (not run by consumers)
 │   ├── unit/
 │   │   └── test-assert.sh           # self-tests for assert.sh
 │   └── integration/
@@ -211,6 +211,13 @@ Completed 2026-03-16 (launch session):
 - GitHub issues #1–11 confirmed pre-existing; all closed as completed
 - Docker matrix verified: bash 3.2 / 4.4 / 5.x — 38/38 each, 3/3 PASS
 - `fissible/shellql` wired up: ptyunit added as git submodule at `tests/ptyunit`
+
+Completed 2026-03-16 (consumer API refactor):
+- Renamed `tests/` → `self-tests/` — ptyunit's own tests are now namespaced and invisible to consumers
+- `run.sh` auto-detects context via `pwd -P` vs `PTYUNIT_DIR`: consumer projects get `$(pwd)/tests`, ptyunit dev gets `self-tests/`
+- Consumer API is now just `bash tests/ptyunit/run.sh` — no wrapper needed
+- Removed `tests/run.sh` wrapper from shellql; updated shellql submodule to `17af4d1`
+- Updated README and integration-guide to reflect no-wrapper pattern
 
 **Notable fix (2026-03-15):** `read -n1` in bash treats `\n` as end-of-line and swallows it, so ENTER (sent as `\r`, translated to `\n` by TTY `icrnl`) produced empty `_key`. Fix: `read -r -d '' -n1` (null delimiter) in both example scripts' main input loops.
 
