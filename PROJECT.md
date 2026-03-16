@@ -199,21 +199,21 @@ Exit codes: script's own exit code, or `124` on timeout.
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-15_
+_Last updated: 2026-03-16_
 
-**All phases complete. 38/38 tests pass locally (`bash run.sh`).**
+**All phases complete. Repo is public. Docker matrix 3/3 green. shellql wired up.**
 
-Completed this session:
-- Phase 1: `assert.sh`, `run.sh`, `pty_run.py`, `docker/` — all extracted, shellframe refs removed
-- Phase 2: `tests/unit/test-assert.sh` — 20/20 pass
-- Phase 3: `examples/confirm.sh`, `examples/menu.sh` — standalone, bash 3.2+
-- Phase 4: `tests/integration/test-confirm.sh` (8/8), `tests/integration/test-menu.sh` (10/10)
-- Phase 5: `README.md` (pre-written), `docs/integration-guide.md`
+Completed 2026-03-15 (implementation session):
+- Phases 1–5: all files written, 38/38 tests pass — committed in `d683b90`
 
-**Notable fix during implementation:** `read -n1` in bash treats `\n` as end-of-line delimiter and swallows it, so ENTER (sent as `\r`, translated to `\n` by TTY `icrnl`) produced empty `_key`. Fix: `read -r -d '' -n1` (null delimiter) in the main input loop of both example scripts.
+Completed 2026-03-16 (launch session):
+- Pushed to https://github.com/fissible/ptyunit (already public)
+- GitHub issues #1–11 confirmed pre-existing; all closed as completed
+- Docker matrix verified: bash 3.2 / 4.4 / 5.x — 38/38 each, 3/3 PASS
+- `fissible/shellql` wired up: ptyunit added as git submodule at `tests/ptyunit`
+
+**Notable fix (2026-03-15):** `read -n1` in bash treats `\n` as end-of-line and swallows it, so ENTER (sent as `\r`, translated to `\n` by TTY `icrnl`) produced empty `_key`. Fix: `read -r -d '' -n1` (null delimiter) in both example scripts' main input loops.
 
 **Next steps:**
-1. Create GitHub issues 1–11 (GitHub MCP auth was not available this session)
-2. `git init` the ptyunit directory and push to https://github.com/fissible/ptyunit
-3. Verify Docker matrix passes (`bash docker/run-matrix.sh`)
-4. Update `fissible/shellframe` to use ptyunit as a git submodule (once repo is public)
+1. Update `fissible/shellframe` to use ptyunit as a git submodule (replace `tests/assert.sh`, `tests/run.sh`, `tests/pty_run.py`, `tests/docker/` with the submodule)
+2. No open issues remain — all closed
