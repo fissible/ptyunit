@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/unit/test-assert.sh — Self-tests for assert.sh
+# self-tests/unit/test-assert.sh — Self-tests for assert.sh
 
 set -u
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

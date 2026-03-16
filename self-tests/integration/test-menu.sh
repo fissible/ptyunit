@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/integration/test-menu.sh — PTY-driven tests for examples/menu.sh
+# self-tests/integration/test-menu.sh — PTY-driven tests for examples/menu.sh
 
 set -u
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tests/integration/test-confirm.sh — PTY-driven tests for examples/confirm.sh
+# self-tests/integration/test-confirm.sh — PTY-driven tests for examples/confirm.sh
 
 set -u
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

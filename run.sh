@@ -2,9 +2,14 @@
 # ptyunit/run.sh — Discover and run all test files
 #
 # Usage: bash run.sh [--unit | --integration | --all]
+#        bash tests/ptyunit/run.sh [--unit | --integration | --all]  (from consumer project root)
 #
-# Unit tests:        tests/unit/test-*.sh        (pure bash, no PTY)
-# Integration tests: tests/integration/test-*.sh (require Python 3 + PTY)
+# Context detection (no wrapper needed):
+#   - Run from ptyunit's own root  → discovers self-tests/unit/ and self-tests/integration/
+#   - Run from any other directory → discovers <pwd>/tests/unit/ and <pwd>/tests/integration/
+#
+# Unit tests:        <tests>/unit/test-*.sh        (pure bash, no PTY)
+# Integration tests: <tests>/integration/test-*.sh (require Python 3 + PTY)
 #
 # Each test-*.sh should source assert.sh, run assertions, then call
 # ptyunit_test_summary at the end.  run.sh aggregates total pass/fail
@@ -12,8 +17,15 @@
 
 set -u
 
-PTYUNIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TESTS_DIR="$PTYUNIT_DIR/tests"
+PTYUNIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+# When invoked from ptyunit's own root, run its self-tests.
+# When invoked from a consumer project, run that project's tests.
+if [[ "$(pwd -P)" == "$PTYUNIT_DIR" ]]; then
+    TESTS_DIR="$PTYUNIT_DIR/self-tests"
+else
+    TESTS_DIR="$(pwd)/tests"
+fi
 
 _mode="${1:---all}"
 _total_pass=0
