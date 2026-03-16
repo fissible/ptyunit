@@ -120,9 +120,8 @@ bash tests/ptyunit/run.sh --unit
 bash tests/ptyunit/run.sh --integration
 ```
 
-`run.sh` discovers test files matching `tests/unit/test-*.sh` and
-`tests/integration/test-*.sh` relative to itself, so keep your test files
-in those directories.
+`run.sh` auto-detects context: when invoked from your project root it discovers
+`tests/unit/test-*.sh` and `tests/integration/test-*.sh` there. No wrapper needed.
 
 ---
 

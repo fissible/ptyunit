@@ -26,8 +26,10 @@ injects named keystrokes (`UP`, `DOWN`, `ENTER`, `ESC`, `SPACE`, ...), drains an
 ANSI-strips the output, and returns it as plain text. Works with any TUI — shellframe,
 dialog, fzf, whiptail, or one you wrote yourself.
 
-**`run.sh`** — the test runner. Discovers `tests/unit/test-*.sh` and
-`tests/integration/test-*.sh`, runs each in a subshell, aggregates results, exits
+**`run.sh`** — the test runner. Auto-detects context: when called from a consumer
+project root it discovers that project's `tests/unit/test-*.sh` and
+`tests/integration/test-*.sh`; when called from ptyunit's own root it runs
+ptyunit's self-tests. Runs each file in a subshell, aggregates results, exits
 non-zero on any failure. Silently skips integration tests if Python 3 is absent.
 
 **`docker/`** — a Docker cross-version matrix. Runs your full test suite against bash
