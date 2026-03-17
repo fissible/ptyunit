@@ -55,6 +55,20 @@ assert_contains() {
     fi
 }
 
+# Assert a string does NOT contain a substring.
+assert_not_contains() {
+    local haystack="$1" needle="$2" msg="${3:-}"
+    if [[ "$haystack" != *"$needle"* ]]; then
+        (( _PTYUNIT_TEST_PASS++ ))
+    else
+        (( _PTYUNIT_TEST_FAIL++ ))
+        printf 'FAIL'
+        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
+        [[ -n "$msg" ]] && printf ' — %s' "$msg"
+        printf '\n  expected NOT to contain: %q\n  actual: %q\n' "$needle" "$haystack"
+    fi
+}
+
 # Print a summary line and exit 1 if any tests failed.
 ptyunit_test_summary() {
     local total=$(( _PTYUNIT_TEST_PASS + _PTYUNIT_TEST_FAIL ))
