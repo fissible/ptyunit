@@ -44,6 +44,7 @@ fi
 # ── Flag parsing ──────────────────────────────────────────────────────────────
 _mode="--all"
 _jobs=$(nproc 2>/dev/null || echo 4)
+_verbose=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -51,6 +52,8 @@ while [[ $# -gt 0 ]]; do
             _mode="$1"; shift ;;
         --debug)
             _jobs=1; shift ;;
+        --verbose|-v)
+            _verbose=1; shift ;;
         --jobs)
             _jobs="${2:-}"
             if [[ -z "$_jobs" ]]; then
@@ -96,6 +99,15 @@ _total_skip=0
 _failed_files=()
 _skipped_files=()
 
+# ── Timing helper ─────────────────────────────────────────────────────────────
+_ptyunit_now() {
+    if [[ "${BASH_VERSINFO[0]}" -ge 5 ]]; then
+        printf '%s' "${EPOCHREALTIME}"
+    else
+        date +%s
+    fi
+}
+
 # ── Worker: run one test file, write results to work_dir ─────────────────────
 # Called inside a background subshell. Writes:
 #   work_dir/<name>.out  — formatted output line(s) for this file
@@ -121,9 +133,13 @@ _run_job() {
         fi
     fi
 
+    local _t0 _t1 _elapsed
+    _t0=$(_ptyunit_now)
     local out
     out=$(bash "$f" 2>&1)
     local rc=$?
+    _t1=$(_ptyunit_now)
+    _elapsed=$(awk "BEGIN{printf \"%.1f\", $_t1 - $_t0}")
 
     # rc=3 means the test file called ptyunit_skip / ptyunit_require_bash
     if (( rc == 3 )); then
@@ -142,11 +158,17 @@ _run_job() {
 
     printf '%d %d %d\n' "$rc" "$passed" "$total" > "$res_f"
 
+    local _aps=""
+    if (( _verbose )); then
+        _aps=$(awk "BEGIN{d = $_elapsed > 0.001 ? $_elapsed : 0.001; printf \" (%.2f asserts/second)\", $total / d}")
+    fi
+
     if (( rc == 0 )); then
-        printf '  %s ... %s (%d/%d)\n' "$name" "$_OK_LABEL" "$passed" "$total" > "$out_f"
+        printf '  %s ... %s (%d/%d) in %s secs%s\n' \
+            "$name" "$_OK_LABEL" "$passed" "$total" "$_elapsed" "$_aps" > "$out_f"
     else
         {
-            printf '  %s ... %s\n' "$name" "$_FAIL_LABEL"
+            printf '  %s ... %s in %s secs\n' "$name" "$_FAIL_LABEL" "$_elapsed"
             while IFS= read -r _line; do
                 printf '    %s\n' "$_line"
             done <<< "$out"
