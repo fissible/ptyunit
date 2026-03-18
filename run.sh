@@ -160,7 +160,7 @@ _run_job() {
 
     local _aps=""
     if (( _verbose )); then
-        _aps=$(awk "BEGIN{d = $_elapsed > 0.001 ? $_elapsed : 0.001; printf \" (%.2f asserts/second)\", $total / d}")
+        _aps=$(awk "BEGIN{if($_elapsed >= 0.05) printf \" (%.2f asserts/second)\", $total / $_elapsed; else printf \" (asserts/second: n/a — elapsed < 0.1s)\"}")
     fi
 
     if (( rc == 0 )); then
