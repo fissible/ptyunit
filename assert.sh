@@ -59,13 +59,105 @@ assert_contains() {
 assert_not_contains() {
     local haystack="$1" needle="$2" msg="${3:-}"
     if [[ "$haystack" != *"$needle"* ]]; then
-        (( _PTYUNIT_TEST_PASS++ ))
+        (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ ))
+        (( _PTYUNIT_TEST_FAIL++ )) || true
         printf 'FAIL'
         [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
         [[ -n "$msg" ]] && printf ' — %s' "$msg"
         printf '\n  expected NOT to contain: %q\n  actual: %q\n' "$needle" "$haystack"
+    fi
+}
+
+# Skip this test file with an optional reason. Exits with code 3 (skip signal).
+# Usage: ptyunit_skip [reason]
+ptyunit_skip() {
+    local reason="${1:-}"
+    if [[ -n "$reason" ]]; then
+        printf 'SKIP (%s)\n' "$reason"
+    else
+        printf 'SKIP\n'
+    fi
+    exit 3
+}
+
+# Skip this test file if the running bash is older than MAJOR[.MINOR].
+# Usage: ptyunit_require_bash MAJOR [MINOR]
+ptyunit_require_bash() {
+    local major="$1" minor="${2:-0}"
+    if (( BASH_VERSINFO[0] < major )) ||
+       (( BASH_VERSINFO[0] == major && BASH_VERSINFO[1] < minor )); then
+        ptyunit_skip "requires bash ${major}.${minor}, running ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}"
+    fi
+}
+
+# Assert two strings are NOT equal.
+assert_not_eq() {
+    local expected="$1" actual="$2" msg="${3:-}"
+    if [[ "$expected" != "$actual" ]]; then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        (( _PTYUNIT_TEST_FAIL++ )) || true
+        printf 'FAIL'
+        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
+        [[ -n "$msg" ]] && printf ' — %s' "$msg"
+        printf '\n  expected not equal to: %q\n' "$expected"
+    fi
+}
+
+# Assert a command exits 0 (true).
+# Usage: assert_true command [args...]
+assert_true() {
+    local msg="$*"
+    if "$@" 2>/dev/null; then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        (( _PTYUNIT_TEST_FAIL++ )) || true
+        printf 'FAIL'
+        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
+        printf ' — expected true: %s\n' "$msg"
+    fi
+}
+
+# Assert a command exits non-zero (false).
+# Usage: assert_false command [args...]
+assert_false() {
+    local msg="$*"
+    if ! "$@" 2>/dev/null; then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        (( _PTYUNIT_TEST_FAIL++ )) || true
+        printf 'FAIL'
+        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
+        printf ' — expected false: %s\n' "$msg"
+    fi
+}
+
+# Assert a string is empty (null).
+assert_null() {
+    local value="$1" msg="${2:-}"
+    if [[ -z "$value" ]]; then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        (( _PTYUNIT_TEST_FAIL++ )) || true
+        printf 'FAIL'
+        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
+        [[ -n "$msg" ]] && printf ' — %s' "$msg"
+        printf '\n  expected empty, got: %q\n' "$value"
+    fi
+}
+
+# Assert a string is non-empty (not null).
+assert_not_null() {
+    local value="$1" msg="${2:-}"
+    if [[ -n "$value" ]]; then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        (( _PTYUNIT_TEST_FAIL++ )) || true
+        printf 'FAIL'
+        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
+        [[ -n "$msg" ]] && printf ' — %s' "$msg"
+        printf '\n  expected non-empty string\n'
     fi
 }
 

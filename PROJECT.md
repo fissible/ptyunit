@@ -138,6 +138,62 @@ demonstrate what ptyunit can test and to give integration tests something to dri
 
 ---
 
+## Phase 6 — Coverage & Test Health
+> Adds code coverage reporting and tooling to identify redundant tests.
+> Runs inside the Docker matrix (kcov is Linux-only).
+> Depends on: Phase 5
+
+| # | Task | Effort | GH Issue | Status | Deps |
+|---|------|--------|----------|--------|------|
+| 12 | Add `--coverage` flag to `run.sh`: run suite under kcov (bash) / coverage.py (pty_run.py); output to `coverage/` directory; document in README | M | — | **todo** | 10,11 |
+| 13 | Per-test coverage capture: run each test file individually under kcov; emit per-test `.json` coverage sets to `coverage/per-test/` | M | — | **todo** | 12 |
+| 14 | Redundancy detection tool (`tools/find-redundant.sh`): compare per-test coverage sets; report tests whose covered lines are a subset of another test's; cross-reference with hyperfine timing so the faster test is recommended as the keeper | L | — | **todo** | 13 |
+
+---
+
+## Phase 7 — Assertion & Runner Parity
+> Closes the top feature gaps vs. BATS and shunit2.
+> Items are independent of Phase 6 and can be done in any order.
+> Depends on: Phase 5
+
+| # | Task | Effort | GH Issue | Status | Deps |
+|---|------|--------|----------|--------|------|
+| 15 | `setUp` / `tearDown` hooks: `setUp.sh` and `tearDown.sh` alongside test files; runner creates `PTYUNIT_TEST_TMPDIR` per file; tearDown always runs; setUp failure → SKIP | M | — | **done** | 10 |
+| 16 | JUnit XML + TAP output: `--format junit` and `--format tap` flags on `run.sh`; enables GitHub Actions test reporters, Jenkins, and any TAP consumer | S | — | **todo** | 10 |
+| 17 | Richer assertion suite in `assert.sh`: `assert_not_eq`, `assert_true`, `assert_false`, `assert_null`, `assert_not_null` | XS | — | **done** | 1 |
+| 18 | Colorized output in `run.sh`: green OK / yellow SKIP / red FAIL; respects `NO_COLOR`; `FORCE_COLOR=1` enables in non-TTY (CI) | XS | — | **done** | 10 |
+| 19 | Test skipping: `ptyunit_skip [reason]` function in `assert.sh`; `run.sh` counts and displays skipped files separately; useful for platform-conditional tests | S | — | **todo** | 15 |
+
+---
+
+## Prioritized Backlog — Scored
+
+> All candidate features (#12–19) scored and ranked. Use this to decide what to build next.
+>
+> Scoring: **Impact** (1–5, how much it improves experience for users who need it) ×
+> **Reach** (1–5, how broadly the user base benefits) = **Core**. Plus a
+> **Differentiation bonus** (+5 unique to ptyunit, +2 gap vs. competitors, +0 parity).
+> Lower-effort items break ties.
+
+| Rank | # | Feature | Impact | Reach | Core | Diff | Total | Effort | Deps | Status |
+|------|---|---------|--------|-------|------|------|-------|--------|------|--------|
+| 1 | 15 | setUp / tearDown hooks | 5 | 5 | 25 | +2 | **27** | M | — | **done** |
+| 2 | 12 | `--coverage` flag | 5 | 3 | 15 | +5 | **20** | M | — | todo |
+| 3 | 16 | JUnit XML + TAP output | 4 | 4 | 16 | +2 | **18** | S | — | todo |
+| 4 | 17 | Richer assertions | 3 | 5 | 15 | +2 | **17** | XS | — | **done** |
+| 5 | 13 | Per-test coverage capture | 4 | 3 | 12 | +5 | **17** | M | 12 | todo |
+| 6 | 18 | Colorized output | 3 | 5 | 15 | +0 | **15** | XS | — | **done** |
+| 7 | 14 | Redundancy detection tool | 5 | 2 | 10 | +5 | **15** | L | 13 | todo |
+| 8 | 19 | Test skipping | 3 | 3 | 9 | +2 | **11** | S | 15 | todo |
+
+**Notes:**
+- #17 and #18 are XS effort and unblocked — high ROI per hour even at ranks 4 and 6.
+- #12 → #13 → #14 is a prerequisite chain; start #12 before any coverage work.
+- #19 (test skipping) depends on #15 (setUp/tearDown) since both touch the per-file lifecycle.
+- Differentiation bonus reflects what neither BATS nor shunit2 offer (+5) vs. what they offer but ptyunit lacks (+2).
+
+---
+
 ## Milestones
 
 | Milestone | Condition | Status |
@@ -145,6 +201,8 @@ demonstrate what ptyunit can test and to give integration tests something to dri
 | **M1: Standalone** | Phase 1 complete; all tests pass with ptyunit naming, no shellframe refs | **done** |
 | **M2: Self-tested** | Phase 2+3+4 complete; ptyunit tests its own components | **done** |
 | **M3: Public launch** | Phase 5 complete; README + guide published; Docker matrix green | **done** (Docker matrix untested — requires Docker) |
+| **M4: Coverage** | Phase 6 complete; `--coverage` flag works in Docker matrix; redundancy tool ships | **todo** |
+| **M5: Full parity** | Phase 7 complete; setUp/tearDown, JUnit/TAP, richer assertions, colorized output, skipping | **todo** |
 
 ---
 
@@ -199,9 +257,25 @@ Exit codes: script's own exit code, or `124` on timeout.
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-16_
+_Last updated: 2026-03-17 (session 2)_
 
 **All phases complete. Repo is public. Docker matrix 3/3 green. shellql wired up.**
+
+Completed 2026-03-17 (session 2 — P-1 setUp/tearDown, P-2 richer assertions + color):
+- `run.sh`: setUp/tearDown hooks — `setUp.sh` and `tearDown.sh` placed alongside test files in the suite dir; runner creates `PTYUNIT_TEST_TMPDIR` (mktemp) per file, exports it to all three scripts; tearDown always runs even on test failure; setUp exit non-zero → SKIP + runner exits 1
+- `run.sh`: colorized output — green OK / yellow SKIP / red FAIL; TTY-detected; `NO_COLOR=1` suppresses; `FORCE_COLOR=1` enables in non-TTY (useful for CI)
+- `assert.sh`: added `assert_not_eq`, `assert_true`, `assert_false`, `assert_null`, `assert_not_null`
+- Added `self-tests/unit/test-runner-hooks.sh` (8 assertions) and `self-tests/unit/test-assert-extended.sh` (13 assertions)
+- Total self-tests: 67/67 pass
+- Tasks #15, #17, #18 marked done in backlog
+
+Completed 2026-03-17 (session 1 — performance):
+- `run.sh`: replaced grep/cut/sed output parsing with `BASH_REMATCH` — eliminates 8 subprocess forks per test file
+- `run.sh`: replaced `$(basename "$f")` with `${f##*/}` — eliminates one fork per file
+- `run.sh`: replaced `sed 's/^/    /'` with a pure-bash `while read` loop
+- `run.sh`: added `--parallel` flag — runs all files in a suite concurrently via background jobs + temp files, collects results in original order after `wait`; especially valuable for integration tests dominated by PTY timing delays
+- `run.sh`: added `|| true` guards on `(( ... ))` arithmetic to prevent `set -e` traps on zero-value results
+- Added `self-tests/unit/test-runner.sh` (8 assertions) covering sequential baseline and parallel aggregate behavior
 
 Completed 2026-03-15 (implementation session):
 - Phases 1–5: all files written, 38/38 tests pass — committed in `d683b90`
@@ -222,5 +296,7 @@ Completed 2026-03-16 (consumer API refactor):
 **Notable fix (2026-03-15):** `read -n1` in bash treats `\n` as end-of-line and swallows it, so ENTER (sent as `\r`, translated to `\n` by TTY `icrnl`) produced empty `_key`. Fix: `read -r -d '' -n1` (null delimiter) in both example scripts' main input loops.
 
 **Next steps:**
-1. Update `fissible/shellframe` to use ptyunit as a git submodule (replace `tests/assert.sh`, `tests/run.sh`, `tests/pty_run.py`, `tests/docker/` with the submodule)
-2. No open issues remain — all closed
+1. #12: `--coverage` flag — slimmest portable Docker image, speed primary (P-3)
+2. #13: Per-test coverage capture (P-4)
+3. #16: JUnit XML + TAP output (P-5)
+4. Update `fissible/shellframe` to use ptyunit as a git submodule
