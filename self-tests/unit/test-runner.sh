@@ -104,6 +104,16 @@ ptyunit_test_begin "skip: skipped file does not appear in Failed files"
 [[ "$_out" != *"Failed files"* ]]
 assert_eq "0" "$?" "skip: no Failed files section"
 
+# ── --debug sets jobs=1 ───────────────────────────────────────────────────────
+ptyunit_test_begin "--debug: recognized without error"
+
+_out=$(cd "$_tmpdir" && bash "$PTYUNIT_DIR/run.sh" --unit --debug 2>&1)
+_rc=$?
+[[ "$_out" != *"Unknown flag"* ]]
+assert_eq "0" "$?" "--debug: not reported as unknown flag"
+assert_contains "$_out" "3/4" "--debug: correct aggregate counts"
+assert_eq "1" "$_rc"          "--debug: exits 1 on failure"
+
 # ── Teardown ──────────────────────────────────────────────────────────────────
 rm -rf "$_tmpdir" "$_tmpdir2" "$_tmpdir3"
 

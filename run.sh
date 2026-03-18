@@ -49,6 +49,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --unit|--integration|--all)
             _mode="$1"; shift ;;
+        --debug)
+            _jobs=1; shift ;;
         --jobs)
             _jobs="${2:-}"
             if [[ -z "$_jobs" ]]; then
