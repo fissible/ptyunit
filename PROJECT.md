@@ -257,9 +257,18 @@ Exit codes: script's own exit code, or `124` on timeout.
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-18 (session 3)_
+_Last updated: 2026-03-18 (session 4)_
 
 **All phases complete. Repo is public. Docker matrix 3/3 green. shellql wired up.**
+
+Completed 2026-03-18 (session 4 — UX polish: debug flag, timing, verbose):
+- `run.sh`: added `--debug` flag as alias for `--jobs 1` (sequential execution for debugging)
+- `run.sh`: added per-file elapsed time to output — `in X.X secs`; fast tests show `in < 0.1 secs`
+- `run.sh`: added `-v` / `--verbose` flag — appends `(N.NN tests/second)` when elapsed is measurable (>= 0.1s); omitted for fast tests to avoid misleading rates
+- `run.sh`: added `_ptyunit_now` helper — uses `$EPOCHREALTIME` on bash 5+, falls back to `date +%s`
+- `self-tests/unit/test-runner.sh`: expanded to 21 assertions; covers `--debug`, timing display, `-v`/`--verbose` flags
+- All scripts given execute permissions (`chmod +x`); pushed as separate commit
+- Total self-tests: 72/72 pass
 
 Completed 2026-03-18 (session 3 — streaming worker pool, version gating, skip UI, README):
 - `run.sh`: dropped `--parallel`; replaced with always-on streaming worker pool. Jobs start as soon as a slot opens (scanner and workers interleaved). Uses fd-based semaphore (`mkfifo` + `exec 4<>`) for bash 3.2-compatible bounded parallelism — no `wait -n`, no polling.

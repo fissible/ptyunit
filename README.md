@@ -235,12 +235,29 @@ Integration tests are silently skipped if `python3` is not in PATH.
 | `--integration` | — | Run integration tests only |
 | `--all` | ✓ | Run all suites (default) |
 | `--jobs N` | `nproc \|\| 4` | Max concurrent test files |
+| `--debug` | — | Alias for `--jobs 1`; sequential execution for debugging |
+| `-v`, `--verbose` | — | Show `tests/second` rate per file (when elapsed ≥ 0.1s) |
+
+### Timing
+
+Each file line includes elapsed time:
+
+```
+  test-foo.sh ... OK (12/12) in 2.1 secs
+  test-bar.sh ... OK (8/8) in < 0.1 secs
+```
+
+Pass `-v` or `--verbose` to also show throughput when elapsed time is measurable:
+
+```
+  test-foo.sh ... OK (12/12) in 2.1 secs (5.71 tests/second)
+```
 
 ### Concurrency
 
 Tests run in a streaming worker pool: each file starts as soon as a slot is free rather
-than waiting for the full list to be collected first. `--jobs 1` gives sequential
-execution, useful for debugging failures.
+than waiting for the full list to be collected first. `--debug` (or `--jobs 1`) gives
+sequential execution, useful for isolating failures.
 
 ### setUp and tearDown
 
