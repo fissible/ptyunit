@@ -216,6 +216,8 @@ ptyunit/
 ├── examples/
 │   ├── confirm.sh                   # minimal yes/no prompt demo
 │   └── menu.sh                      # minimal arrow-key menu demo
+├── bench/
+│   └── concurrency.sh               # parallelism benchmark (not part of test suite)
 ├── self-tests/                      # ptyunit's own tests (not run by consumers)
 │   ├── unit/
 │   │   └── test-assert.sh           # self-tests for assert.sh
@@ -257,9 +259,20 @@ Exit codes: script's own exit code, or `124` on timeout.
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-18 (session 4)_
+_Last updated: 2026-03-18 (session 5)_
 
 **All phases complete. Repo is public. Docker matrix 3/3 green. shellql wired up.**
+
+Completed 2026-03-18 (session 5 — output polish, aliases, bench, install docs):
+- `assert.sh`: added `test_that`, `test_it`, `test_they` as readable aliases for `ptyunit_test_begin`
+- `run.sh`: column-aligned test result output — filenames padded to longest name per suite so OK/FAIL/SKIP, assertion counts, and timing all land in the same column
+- `run.sh`: timing display now conditional — hidden for fast tests by default (< 1s); shown when `--verbose` or elapsed ≥ 1s; `--verbose` also adds `tests/second` rate
+- `run.sh`: `--debug` now enables verbose automatically (was `--jobs 1` only)
+- `run.sh`: header now reports worker count — `ptyunit test runner (4 workers)` or `(sequential)`
+- `self-tests/unit/test-runner.sh`: updated timing assertions to match new conditional display behaviour
+- `bench/concurrency.sh`: new script that synthesises N sleep-1 test files and benchmarks 1..nproc workers; not part of the regular test suite
+- `README.md`: install section rewritten — plain `curl` copy leads, submodule is secondary, PR invitation for package manager support (Homebrew/bpkg/Composer etc.); also updated: `greet` source example, confirm dialog visual, `--debug` in quick start, benchmark section, timing docs, `test_that`/`test_it`/`test_they` in API docs
+- Total self-tests: 72/72 pass
 
 Completed 2026-03-18 (session 4 — UX polish: debug flag, timing, verbose):
 - `run.sh`: added `--debug` flag as alias for `--jobs 1` (sequential execution for debugging)
