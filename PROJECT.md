@@ -162,7 +162,7 @@ demonstrate what ptyunit can test and to give integration tests something to dri
 | 16 | JUnit XML + TAP output: `--format junit` and `--format tap` flags on `run.sh`; enables GitHub Actions test reporters, Jenkins, and any TAP consumer | S | — | **todo** | 10 |
 | 17 | Richer assertion suite in `assert.sh`: `assert_not_eq`, `assert_true`, `assert_false`, `assert_null`, `assert_not_null` | XS | — | **done** | 1 |
 | 18 | Colorized output in `run.sh`: green OK / yellow SKIP / red FAIL; respects `NO_COLOR`; `FORCE_COLOR=1` enables in non-TTY (CI) | XS | — | **done** | 10 |
-| 19 | Test skipping: `ptyunit_skip [reason]` function in `assert.sh`; `run.sh` counts and displays skipped files separately; useful for platform-conditional tests | S | — | **todo** | 15 |
+| 19 | Test skipping: `ptyunit_skip [reason]` function in `assert.sh`; `run.sh` counts and displays skipped files separately; useful for platform-conditional tests | S | — | **done** | 15 |
 
 ---
 
@@ -184,7 +184,7 @@ demonstrate what ptyunit can test and to give integration tests something to dri
 | 5 | 13 | Per-test coverage capture | 4 | 3 | 12 | +5 | **17** | M | 12 | todo |
 | 6 | 18 | Colorized output | 3 | 5 | 15 | +0 | **15** | XS | — | **done** |
 | 7 | 14 | Redundancy detection tool | 5 | 2 | 10 | +5 | **15** | L | 13 | todo |
-| 8 | 19 | Test skipping | 3 | 3 | 9 | +2 | **11** | S | 15 | todo |
+| 8 | 19 | Test skipping | 3 | 3 | 9 | +2 | **11** | S | 15 | **done** |
 
 **Notes:**
 - #17 and #18 are XS effort and unblocked — high ROI per hour even at ranks 4 and 6.
@@ -202,7 +202,7 @@ demonstrate what ptyunit can test and to give integration tests something to dri
 | **M2: Self-tested** | Phase 2+3+4 complete; ptyunit tests its own components | **done** |
 | **M3: Public launch** | Phase 5 complete; README + guide published; Docker matrix green | **done** (Docker matrix untested — requires Docker) |
 | **M4: Coverage** | Phase 6 complete; `--coverage` flag works in Docker matrix; redundancy tool ships | **todo** |
-| **M5: Full parity** | Phase 7 complete; setUp/tearDown, JUnit/TAP, richer assertions, colorized output, skipping | **todo** |
+| **M5: Full parity** | Phase 7 complete; setUp/tearDown, JUnit/TAP, richer assertions, colorized output, skipping | **in progress** (#16 JUnit/TAP remaining) |
 
 ---
 
@@ -257,23 +257,30 @@ Exit codes: script's own exit code, or `124` on timeout.
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-17 (session 2)_
+_Last updated: 2026-03-18 (session 3)_
 
 **All phases complete. Repo is public. Docker matrix 3/3 green. shellql wired up.**
 
-Completed 2026-03-17 (session 2 — P-1 setUp/tearDown, P-2 richer assertions + color):
+Completed 2026-03-18 (session 3 — streaming worker pool, version gating, skip UI, README):
+- `run.sh`: dropped `--parallel`; replaced with always-on streaming worker pool. Jobs start as soon as a slot opens (scanner and workers interleaved). Uses fd-based semaphore (`mkfifo` + `exec 4<>`) for bash 3.2-compatible bounded parallelism — no `wait -n`, no polling.
+- `run.sh`: added `--jobs N` flag (default `nproc || 4`) with `while`/`shift` parsing; validates positive integer.
+- `assert.sh`: added `ptyunit_skip [reason]` (exits 3; runner counts separately, does not fail) and `ptyunit_require_bash MAJOR [MINOR]` (skips if running bash is older than required).
+- `self-tests/unit/test-runner.sh`: expanded to 14 assertions (was 8); covers `--jobs N` accepted, `--parallel` rejected exit 2, skip counting/display, `--jobs 1` sequential.
+- `self-tests/unit/test-assert-extended.sh`: expanded to 23 assertions (was 13); covers `ptyunit_skip`, `ptyunit_require_bash` (exit 3, output, major-only form).
+- Total self-tests: 75/75 pass
+- Tasks #15, #17, #18, #19 marked done; README updated and pushed (`e8cebb0`)
+
+Completed 2026-03-17 (session 2 — setUp/tearDown, richer assertions, color):
 - `run.sh`: setUp/tearDown hooks — `setUp.sh` and `tearDown.sh` placed alongside test files in the suite dir; runner creates `PTYUNIT_TEST_TMPDIR` (mktemp) per file, exports it to all three scripts; tearDown always runs even on test failure; setUp exit non-zero → SKIP + runner exits 1
 - `run.sh`: colorized output — green OK / yellow SKIP / red FAIL; TTY-detected; `NO_COLOR=1` suppresses; `FORCE_COLOR=1` enables in non-TTY (useful for CI)
 - `assert.sh`: added `assert_not_eq`, `assert_true`, `assert_false`, `assert_null`, `assert_not_null`
-- Added `self-tests/unit/test-runner-hooks.sh` (8 assertions) and `self-tests/unit/test-assert-extended.sh` (13 assertions)
-- Total self-tests: 67/67 pass
+- Added `self-tests/unit/test-runner-hooks.sh` (8 assertions) and `self-tests/unit/test-assert-extended.sh` (13 assertions, later expanded)
 - Tasks #15, #17, #18 marked done in backlog
 
 Completed 2026-03-17 (session 1 — performance):
 - `run.sh`: replaced grep/cut/sed output parsing with `BASH_REMATCH` — eliminates 8 subprocess forks per test file
 - `run.sh`: replaced `$(basename "$f")` with `${f##*/}` — eliminates one fork per file
 - `run.sh`: replaced `sed 's/^/    /'` with a pure-bash `while read` loop
-- `run.sh`: added `--parallel` flag — runs all files in a suite concurrently via background jobs + temp files, collects results in original order after `wait`; especially valuable for integration tests dominated by PTY timing delays
 - `run.sh`: added `|| true` guards on `(( ... ))` arithmetic to prevent `set -e` traps on zero-value results
 - Added `self-tests/unit/test-runner.sh` (8 assertions) covering sequential baseline and parallel aggregate behavior
 
