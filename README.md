@@ -40,12 +40,24 @@ Python installed. A failure in any version is a bug.
 
 ### Install
 
-ptyunit is a set of files you source or invoke directly. Copy them into your project's
-`tests/` directory, or add ptyunit as a git submodule.
+ptyunit is a handful of files you source or invoke directly. The simplest install
+is a plain copy — no tooling required:
+
+```bash
+curl -fsSL https://github.com/fissible/ptyunit/archive/refs/heads/main.tar.gz \
+  | tar -xz --strip-components=1 -C tests/ptyunit/ --wildcards \
+      '*/assert.sh' '*/pty_run.py' '*/run.sh'
+```
+
+To pin a version and pull updates with git, use a submodule:
 
 ```bash
 git submodule add https://github.com/fissible/ptyunit tests/ptyunit
 ```
+
+Package manager support (Homebrew, bpkg, Composer, etc.) is welcome via pull
+request — the library has no required build steps, so adding metadata files is
+straightforward.
 
 ### Write a unit test
 
