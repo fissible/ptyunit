@@ -139,7 +139,13 @@ _run_job() {
     out=$(bash "$f" 2>&1)
     local rc=$?
     _t1=$(_ptyunit_now)
-    _elapsed=$(awk "BEGIN{printf \"%.1f\", $_t1 - $_t0}")
+    local _raw_elapsed
+    _raw_elapsed=$(awk "BEGIN{printf \"%.1f\", $_t1 - $_t0}")
+    if [[ "$_raw_elapsed" == "0.0" ]]; then
+        _elapsed="< 0.1"
+    else
+        _elapsed="$_raw_elapsed"
+    fi
 
     # rc=3 means the test file called ptyunit_skip / ptyunit_require_bash
     if (( rc == 3 )); then
@@ -159,8 +165,8 @@ _run_job() {
     printf '%d %d %d\n' "$rc" "$passed" "$total" > "$res_f"
 
     local _aps=""
-    if (( _verbose )); then
-        _aps=$(awk "BEGIN{if($_elapsed >= 0.05) printf \" (%.2f asserts/second)\", $total / $_elapsed; else printf \" (asserts/second: n/a — elapsed < 0.1s)\"}")
+    if (( _verbose )) && [[ "$_elapsed" != "< 0.1" ]]; then
+        _aps=$(awk "BEGIN{printf \" (%.2f tests/second)\", $total / $_raw_elapsed}")
     fi
 
     if (( rc == 0 )); then

@@ -115,28 +115,25 @@ assert_contains "$_out" "3/4" "--debug: correct aggregate counts"
 assert_eq "1" "$_rc"          "--debug: exits 1 on failure"
 
 # ── Timing: each file line includes elapsed time ──────────────────────────────
-ptyunit_test_begin "timing: output includes elapsed time per file"
+ptyunit_test_begin "timing: fast tests show '< 0.1 secs'"
 
 _out=$(cd "$_tmpdir" && bash "$PTYUNIT_DIR/run.sh" --unit 2>&1)
-assert_contains "$_out" " in " "timing: output contains ' in '"
-assert_contains "$_out" "secs"  "timing: output contains 'secs'"
+assert_contains "$_out" "< 0.1 secs" "timing: fast tests show '< 0.1 secs'"
 
-# ── --verbose / -v adds asserts/second ────────────────────────────────────────
-ptyunit_test_begin "--verbose: recognized without error, adds asserts/second"
+# ── --verbose / -v: accepted without error ────────────────────────────────────
+ptyunit_test_begin "--verbose: recognized without error"
 
 _out=$(cd "$_tmpdir" && bash "$PTYUNIT_DIR/run.sh" --unit --verbose 2>&1)
 _rc=$?
 [[ "$_out" != *"Unknown flag"* ]]
 assert_eq "0" "$?" "--verbose: not unknown flag"
-assert_contains "$_out" "asserts/second" "--verbose: output contains asserts/second"
+assert_contains "$_out" "< 0.1 secs" "--verbose: fast tests still show '< 0.1 secs'"
 
-ptyunit_test_begin "-v: recognized without error, adds asserts/second"
+ptyunit_test_begin "-v: recognized without error"
 
 _out=$(cd "$_tmpdir" && bash "$PTYUNIT_DIR/run.sh" --unit -v 2>&1)
-_rc=$?
 [[ "$_out" != *"Unknown flag"* ]]
 assert_eq "0" "$?" "-v: not unknown flag"
-assert_contains "$_out" "asserts/second" "-v: output contains asserts/second"
 
 # ── Teardown ──────────────────────────────────────────────────────────────────
 rm -rf "$_tmpdir" "$_tmpdir2" "$_tmpdir3"
