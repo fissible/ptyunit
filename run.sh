@@ -51,7 +51,7 @@ while [[ $# -gt 0 ]]; do
         --unit|--integration|--all)
             _mode="$1"; shift ;;
         --debug)
-            _jobs=1; shift ;;
+            _jobs=1; _verbose=1; shift ;;
         --verbose|-v)
             _verbose=1; shift ;;
         --jobs)
@@ -113,7 +113,7 @@ _ptyunit_now() {
 #   work_dir/<name>.out  — formatted output line(s) for this file
 #   work_dir/<name>.res  — "rc passed total" on one line
 _run_job() {
-    local f="$1" setUp_file="$2" tearDown_file="$3" work_dir="$4"
+    local f="$1" setUp_file="$2" tearDown_file="$3" work_dir="$4" _col="${5:-0}"
     local name="${f##*/}"
     local out_f="$work_dir/$name.out"
     local res_f="$work_dir/$name.res"
@@ -125,7 +125,7 @@ _run_job() {
     # setUp
     if [[ -n "$setUp_file" ]]; then
         if ! bash "$setUp_file" > /dev/null 2>&1; then
-            printf '  %s ... %s (setUp failed)\n' "$name" "$_SKIP_LABEL" > "$out_f"
+            printf '  %-*s ... %s (setUp failed)\n' "$_col" "$name" "$_SKIP_LABEL" > "$out_f"
             printf '1 0 0\n' > "$res_f"
             [[ -n "$tearDown_file" ]] && bash "$tearDown_file" > /dev/null 2>&1
             rm -rf "$_test_tmpdir"
@@ -149,7 +149,7 @@ _run_job() {
 
     # rc=3 means the test file called ptyunit_skip / ptyunit_require_bash
     if (( rc == 3 )); then
-        printf '  %s ... %s\n' "$name" "${out:-SKIP}" > "$out_f"
+        printf '  %-*s ... %s\n' "$_col" "$name" "${out:-SKIP}" > "$out_f"
         printf '3 0 0\n' > "$res_f"
         [[ -n "$tearDown_file" ]] && bash "$tearDown_file" > /dev/null 2>&1
         rm -rf "$_test_tmpdir"
@@ -164,17 +164,21 @@ _run_job() {
 
     printf '%d %d %d\n' "$rc" "$passed" "$total" > "$res_f"
 
-    local _aps=""
-    if (( _verbose )) && [[ "$_elapsed" != "< 0.1" ]]; then
-        _aps=$(awk "BEGIN{printf \" (%.2f tests/second)\", $total / $_raw_elapsed}")
+    # Show timing if verbose OR the file took >= 1 second
+    local _timing_str=""
+    if (( _verbose )) || awk "BEGIN{exit ($_raw_elapsed >= 1.0) ? 0 : 1}" 2>/dev/null; then
+        _timing_str=" in $_elapsed secs"
+        if (( _verbose )) && [[ "$_elapsed" != "< 0.1" ]]; then
+            _timing_str+=$(awk "BEGIN{printf \" (%.2f tests/second)\", $total / $_raw_elapsed}")
+        fi
     fi
 
     if (( rc == 0 )); then
-        printf '  %s ... %s (%d/%d) in %s secs%s\n' \
-            "$name" "$_OK_LABEL" "$passed" "$total" "$_elapsed" "$_aps" > "$out_f"
+        printf '  %-*s ... %s (%d/%d)%s\n' \
+            "$_col" "$name" "$_OK_LABEL" "$passed" "$total" "$_timing_str" > "$out_f"
     else
         {
-            printf '  %s ... %s in %s secs\n' "$name" "$_FAIL_LABEL" "$_elapsed"
+            printf '  %-*s ... %s%s\n' "$_col" "$name" "$_FAIL_LABEL" "$_timing_str"
             while IFS= read -r _line; do
                 printf '    %s\n' "$_line"
             done <<< "$out"
@@ -207,6 +211,12 @@ _run_suite() {
 
     (( ${#files[@]} == 0 )) && return
 
+    local _col=0
+    for f in "${files[@]}"; do
+        local _n="${f##*/}"
+        (( ${#_n} > _col )) && _col=${#_n}
+    done
+
     printf '\n%s tests:\n' "$label"
 
     local work_dir
@@ -228,7 +238,7 @@ _run_suite() {
     for f in "${files[@]}"; do
         read -r -n1 -u4 _tok        # acquire slot (blocks when pool is full)
         (
-            _run_job "$f" "$setUp_file" "$tearDown_file" "$work_dir"
+            _run_job "$f" "$setUp_file" "$tearDown_file" "$work_dir" "$_col"
             printf 'x' >&4          # release slot
         ) &
     done
@@ -261,7 +271,11 @@ _run_suite() {
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
-printf 'ptyunit test runner\n'
+if (( _jobs == 1 )); then
+    printf 'ptyunit test runner (sequential)\n'
+else
+    printf 'ptyunit test runner (%d workers)\n' "$_jobs"
+fi
 
 case "$_mode" in
     --unit)

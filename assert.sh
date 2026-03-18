@@ -16,6 +16,10 @@ _PTYUNIT_TEST_NAME=""
 ptyunit_test_begin() {
     _PTYUNIT_TEST_NAME="$1"
 }
+# Readable aliases — use whichever reads most naturally for your test.
+test_that() { ptyunit_test_begin "$@"; }
+test_it()   { ptyunit_test_begin "$@"; }
+test_they() { ptyunit_test_begin "$@"; }
 
 # Assert two strings are equal.
 assert_eq() {

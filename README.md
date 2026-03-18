@@ -49,23 +49,45 @@ git submodule add https://github.com/fissible/ptyunit tests/ptyunit
 
 ### Write a unit test
 
+The function under test:
+
+```bash
+# mylib.sh
+greet() { printf 'Hello, %s' "$1"; }
+```
+
+The test file:
+
 ```bash
 #!/usr/bin/env bash
 # tests/unit/test-mylib.sh
 
 TESTS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 source "$TESTS_DIR/ptyunit/assert.sh"
+source "mylib.sh"
 
-ptyunit_test_begin "greet: returns correct string"
+test_that "greet returns correct string"
 assert_output "Hello, world" greet "world"
 
-ptyunit_test_begin "greet: handles empty name"
+test_that "greet handles empty name"
 assert_output "Hello, " greet ""
 
 ptyunit_test_summary
 ```
 
 ### Write a PTY integration test
+
+`myprompt.sh` is an interactive confirm dialog that renders directly to the
+terminal via `/dev/tty`. It looks like this when it runs:
+
+```
+Confirm? [ Yes ]   No      ← initial state; Yes is highlighted
+Confirm?   Yes    [ No  ]  ← after pressing RIGHT arrow
+```
+
+`pty_run.py` drives it inside a real pseudoterminal — injecting keystrokes,
+capturing everything that appears on screen, and returning stripped text. The
+test then asserts on keywords in that output:
 
 ```bash
 #!/usr/bin/env bash
@@ -78,11 +100,14 @@ source "$TESTS_DIR/ptyunit/assert.sh"
 
 _pty() { python3 "$PTY_RUN" "$SCRIPT" "$@" 2>/dev/null; }
 
-ptyunit_test_begin "confirm: y key"
+test_it "confirms when y is pressed"
 assert_contains "$(_pty y)" "Confirmed"
 
-ptyunit_test_begin "confirm: ESC cancels"
+test_it "cancels when ESC is pressed"
 assert_contains "$(_pty ESC)" "Cancelled"
+
+test_it "navigates right then confirms"
+assert_contains "$(_pty RIGHT ENTER)" "Cancelled"   # RIGHT moves to No
 
 ptyunit_test_summary
 ```
@@ -94,7 +119,19 @@ bash tests/ptyunit/run.sh                    # all suites
 bash tests/ptyunit/run.sh --unit             # unit tests only
 bash tests/ptyunit/run.sh --integration      # integration tests only
 bash tests/ptyunit/run.sh --jobs 8           # override worker count
+bash tests/ptyunit/run.sh --debug            # sequential + verbose (isolate failures)
 ```
+
+### Benchmark worker concurrency
+
+```bash
+bash tests/ptyunit/bench/concurrency.sh      # 6 synthetic files, 1–nproc workers
+bash tests/ptyunit/bench/concurrency.sh 10   # use 10 files instead
+```
+
+Generates N test files that each sleep 1 second, runs the suite at every worker
+count from 1 to `nproc`, and prints wall-clock time and speedup. Not part of the
+regular test suite — run it manually when you want to measure parallelism.
 
 ### Run the Docker cross-version matrix
 
@@ -112,9 +149,16 @@ source path/to/assert.sh
 
 ### Test lifecycle
 
-#### `ptyunit_test_begin "section name"`
+#### `ptyunit_test_begin "description"` / `test_that` / `test_it` / `test_they`
 
 Sets the current test section label. All subsequent assertion failures print this label.
+`test_that`, `test_it`, and `test_they` are aliases — use whichever reads most naturally:
+
+```bash
+test_that "greet returns correct string"
+test_it "handles an empty name"
+test_they "all return the correct prefix"
+```
 
 #### `ptyunit_test_summary`
 
@@ -235,22 +279,25 @@ Integration tests are silently skipped if `python3` is not in PATH.
 | `--integration` | — | Run integration tests only |
 | `--all` | ✓ | Run all suites (default) |
 | `--jobs N` | `nproc \|\| 4` | Max concurrent test files |
-| `--debug` | — | Alias for `--jobs 1`; sequential execution for debugging |
-| `-v`, `--verbose` | — | Show `tests/second` rate per file (when elapsed ≥ 0.1s) |
+| `--debug` | — | Sets `--jobs 1` and enables verbose; sequential execution for isolating failures |
+| `-v`, `--verbose` | — | Show elapsed time for all files; add `tests/second` rate when elapsed ≥ 0.1s |
 
 ### Timing
 
-Each file line includes elapsed time:
+Elapsed time is shown only when it matters — when a file takes ≥ 1 second, or
+verbose mode is active. Fast tests stay clean:
 
 ```
-  test-foo.sh ... OK (12/12) in 2.1 secs
-  test-bar.sh ... OK (8/8) in < 0.1 secs
+  test-assert.sh ... OK (20/20)
+  test-confirm.sh ... OK (8/8) in 6.0 secs
 ```
 
-Pass `-v` or `--verbose` to also show throughput when elapsed time is measurable:
+Pass `-v` / `--verbose` to show timing for all files, plus throughput when
+elapsed time is measurable:
 
 ```
-  test-foo.sh ... OK (12/12) in 2.1 secs (5.71 tests/second)
+  test-assert.sh  ... OK (20/20) in < 0.1 secs
+  test-confirm.sh ... OK (8/8) in 6.0 secs (1.33 tests/second)
 ```
 
 ### Concurrency

@@ -114,11 +114,11 @@ assert_eq "0" "$?" "--debug: not reported as unknown flag"
 assert_contains "$_out" "3/4" "--debug: correct aggregate counts"
 assert_eq "1" "$_rc"          "--debug: exits 1 on failure"
 
-# ── Timing: each file line includes elapsed time ──────────────────────────────
-ptyunit_test_begin "timing: fast tests show '< 0.1 secs'"
+# ── Timing: fast tests hide elapsed in default mode; show when verbose ─────────
+ptyunit_test_begin "timing: fast tests omit elapsed by default"
 
 _out=$(cd "$_tmpdir" && bash "$PTYUNIT_DIR/run.sh" --unit 2>&1)
-assert_contains "$_out" "< 0.1 secs" "timing: fast tests show '< 0.1 secs'"
+assert_not_contains "$_out" "secs" "timing: fast tests hide elapsed by default"
 
 # ── --verbose / -v: accepted without error ────────────────────────────────────
 ptyunit_test_begin "--verbose: recognized without error"
@@ -127,7 +127,7 @@ _out=$(cd "$_tmpdir" && bash "$PTYUNIT_DIR/run.sh" --unit --verbose 2>&1)
 _rc=$?
 [[ "$_out" != *"Unknown flag"* ]]
 assert_eq "0" "$?" "--verbose: not unknown flag"
-assert_contains "$_out" "< 0.1 secs" "--verbose: fast tests still show '< 0.1 secs'"
+assert_contains "$_out" "< 0.1 secs" "--verbose: fast tests show '< 0.1 secs'"
 
 ptyunit_test_begin "-v: recognized without error"
 
