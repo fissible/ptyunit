@@ -1,12 +1,10 @@
 # ptyunit
 
-**Most bash test frameworks test what goes to stdout. ptyunit tests what appears on screen.**
+**Most bash test frameworks stop at stdout. That falls apart for interactive programs.**
 
-If your script renders to `/dev/tty`, navigates menus with arrow keys, or drives an
-interactive TUI — no existing bash test framework can touch it. ptyunit can. It opens a
-real pseudoterminal, scripts keystrokes into your program, strips the ANSI noise, and
-lets you write plain assertions against what a user would actually see. No tmux. No
-screen scraping hacks. A real PTY — the same mechanism your terminal emulator uses.
+ptyunit tests what appears on screen. It runs your script inside a real pseudoterminal, 
+drives it with keystrokes, and returns clean text you can assert against. If your code 
+uses `/dev/tty`, menus, or TUIs, this is the layer you actually care about.
 
 ```bash
 # Drive a TUI confirm dialog with keystrokes, assert on its output
