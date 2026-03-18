@@ -28,8 +28,8 @@ dialog, fzf, whiptail, or one you wrote yourself.
 
 **`run.sh`** — the test runner. Auto-detects context: when called from a consumer
 project root it discovers that project's `tests/unit/test-*.sh` and
-`tests/integration/test-*.sh`; when called from ptyunit's own root it runs
-ptyunit's self-tests. Runs each file in a subshell, aggregates results, exits
+`tests/integration/test-*.sh`; when called from ptyunit's own root it runs ptyunit's
+self-tests. Runs all files through a streaming worker pool, aggregates results, exits
 non-zero on any failure. Silently skips integration tests if Python 3 is absent.
 
 **`docker/`** — a Docker cross-version matrix. Runs your full test suite against bash
@@ -92,9 +92,10 @@ ptyunit_test_summary
 ### Run your tests
 
 ```bash
-bash tests/ptyunit/run.sh           # all suites
-bash tests/ptyunit/run.sh --unit    # unit tests only
-bash tests/ptyunit/run.sh --integration  # integration tests only
+bash tests/ptyunit/run.sh                    # all suites
+bash tests/ptyunit/run.sh --unit             # unit tests only
+bash tests/ptyunit/run.sh --integration      # integration tests only
+bash tests/ptyunit/run.sh --jobs 8           # override worker count
 ```
 
 ### Run the Docker cross-version matrix
@@ -111,35 +112,185 @@ bash tests/ptyunit/docker/run-matrix.sh
 source path/to/assert.sh
 ```
 
+### Test lifecycle
+
 #### `ptyunit_test_begin "section name"`
 
 Sets the current test section label. All subsequent assertion failures print this label.
-No return value.
-
-#### `assert_eq "$expected" "$actual" ["$msg"]`
-
-Fails if the two strings differ. Failure output:
-```
-FAIL [section] — msg
-  expected: 'hello'
-  actual:   'world'
-```
-
-#### `assert_output "$expected" command [args...]`
-
-Runs `command [args...]` in a subshell, captures stdout, compares with `assert_eq`.
-stderr is discarded.
-
-#### `assert_contains "$haystack" "$needle" ["$msg"]`
-
-Fails if `$needle` is not a substring of `$haystack`. The primary assertion for PTY
-integration tests — assert on a word that appears in stripped terminal output.
 
 #### `ptyunit_test_summary`
 
 Prints `OK  N/M tests passed` or `FAIL  N/M tests passed (F failed)`.
 **Exits 0** if all assertions passed; **exits 1** if any failed.
 Always call this as the last line of every test file.
+
+#### `ptyunit_skip ["reason"]`
+
+Skips the remainder of the test file with an optional reason message. The runner
+displays the file as `SKIP` and does not count it as a failure. Useful for
+platform-conditional tests.
+
+```bash
+[[ "$(uname)" == "Darwin" ]] || ptyunit_skip "macOS only"
+```
+
+#### `ptyunit_require_bash MAJOR [MINOR]`
+
+Skips the test file if the running bash version is older than `MAJOR.MINOR`. Place at
+the top of any test file that uses features not available in older bash versions.
+
+```bash
+ptyunit_require_bash 4 3   # skip on bash < 4.3
+```
+
+In the Docker cross-version matrix, test files with version requirements automatically
+skip in containers where bash is too old — no manual filtering needed.
+
+---
+
+### Equality
+
+#### `assert_eq "$expected" "$actual" ["$msg"]`
+
+Fails if the two strings differ.
+
+```
+FAIL [section] — msg
+  expected: 'hello'
+  actual:   'world'
+```
+
+#### `assert_not_eq "$unexpected" "$actual" ["$msg"]`
+
+Fails if the two strings are equal.
+
+---
+
+### Substrings
+
+#### `assert_contains "$haystack" "$needle" ["$msg"]`
+
+Fails if `$needle` is not a substring of `$haystack`. The primary assertion for PTY
+integration tests — assert on a word that appears in stripped terminal output.
+
+#### `assert_not_contains "$haystack" "$needle" ["$msg"]`
+
+Fails if `$needle` is found in `$haystack`.
+
+---
+
+### Commands
+
+#### `assert_output "$expected" command [args...]`
+
+Runs `command [args...]` in a subshell, captures stdout, compares with `assert_eq`.
+stderr is discarded.
+
+#### `assert_true command [args...]`
+
+Fails if `command` exits non-zero.
+
+```bash
+assert_true test -f "$config_file"
+assert_true grep -q "pattern" "$file"
+```
+
+#### `assert_false command [args...]`
+
+Fails if `command` exits zero.
+
+```bash
+assert_false test -f "$should_not_exist"
+```
+
+---
+
+### Values
+
+#### `assert_null "$value" ["$msg"]`
+
+Fails if `$value` is non-empty.
+
+#### `assert_not_null "$value" ["$msg"]`
+
+Fails if `$value` is empty.
+
+---
+
+## run.sh
+
+```
+bash run.sh [--unit | --integration | --all] [--jobs N]
+```
+
+Discovers test files by glob (`tests/unit/test-*.sh`, `tests/integration/test-*.sh`).
+Runs them through a streaming worker pool and aggregates pass/fail/skip counts.
+Exits 0 only if all non-skipped files pass.
+
+Integration tests are silently skipped if `python3` is not in PATH.
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--unit` | — | Run unit tests only |
+| `--integration` | — | Run integration tests only |
+| `--all` | ✓ | Run all suites (default) |
+| `--jobs N` | `nproc \|\| 4` | Max concurrent test files |
+
+### Concurrency
+
+Tests run in a streaming worker pool: each file starts as soon as a slot is free rather
+than waiting for the full list to be collected first. `--jobs 1` gives sequential
+execution, useful for debugging failures.
+
+### setUp and tearDown
+
+Place `setUp.sh` and/or `tearDown.sh` alongside your test files in the suite directory.
+
+- `setUp.sh` runs before each test file. If it exits non-zero, that file is skipped and
+  counted as a failure.
+- `tearDown.sh` runs after each test file, even if the test failed.
+- Both scripts receive `PTYUNIT_TEST_TMPDIR` — a per-test temporary directory created
+  by the runner and automatically cleaned up after tearDown. Use it to share state
+  between setUp, the test, and tearDown without hardcoding paths.
+
+```
+tests/
+└── unit/
+    ├── setUp.sh          # runs before each test-*.sh
+    ├── tearDown.sh       # runs after each test-*.sh
+    ├── test-foo.sh
+    └── test-bar.sh
+```
+
+```bash
+# tests/unit/setUp.sh
+cp fixture.db "$PTYUNIT_TEST_TMPDIR/test.db"
+
+# tests/unit/test-foo.sh
+source "$TESTS_DIR/ptyunit/assert.sh"
+assert_true test -f "$PTYUNIT_TEST_TMPDIR/test.db"
+ptyunit_test_summary
+
+# tests/unit/tearDown.sh
+rm -f "$PTYUNIT_TEST_TMPDIR/test.db"
+```
+
+### Skip handling
+
+Test files that call `ptyunit_skip` or `ptyunit_require_bash` exit with code 3. The
+runner displays them as `SKIP`, lists them under "Skipped: N file(s)" in the summary,
+and does not count them as failures.
+
+### Color
+
+Output is colorized (green OK / yellow SKIP / red FAIL) when stdout is a TTY.
+
+| Variable | Effect |
+|----------|--------|
+| `NO_COLOR=1` | Suppress all color |
+| `FORCE_COLOR=1` | Enable color even when stdout is not a TTY (e.g. CI) |
 
 ---
 
@@ -196,20 +347,6 @@ output, exit_code = run("examples/confirm.sh", ["y"], key_delay=0.1)
 
 ---
 
-## run.sh
-
-```
-bash run.sh [--unit | --integration | --all]
-```
-
-Discovers test files by glob (`tests/unit/test-*.sh`, `tests/integration/test-*.sh`).
-Runs each in a subshell. Accumulates pass/fail counts. Exits 0 only if all files pass.
-
-Integration tests are silently skipped if `python3` is not in PATH — safe to run in
-minimal environments.
-
----
-
 ## Docker cross-version matrix
 
 ```
@@ -224,7 +361,8 @@ Builds and runs three images:
 | `ptyunit-bash4` | 4.4 | Bash 4.x feature set |
 | `ptyunit-bash5` | 5.2 | Alpine native |
 
-All images include Python 3. A failure in any version fails the matrix.
+All images include Python 3. A failure in any version fails the matrix. Test files that
+call `ptyunit_require_bash` skip automatically in containers where bash is too old.
 
 ---
 
