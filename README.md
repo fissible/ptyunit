@@ -431,9 +431,11 @@ Builds and runs three images:
 
 | Image | Bash version | Notes |
 |-------|-------------|-------|
-| `ptyunit-bash3` | 3.2 | Simulates macOS default shell; multi-stage build |
-| `ptyunit-bash4` | 4.4 | Bash 4.x feature set |
-| `ptyunit-bash5` | 5.2 | Alpine native |
+| `ptyunit-bash3` | 3.2 |  Matches the Bash version shipped on stock macOS |
+
+| `ptyunit-bash4` | 4.4 | Covers Bash 4-era features |
+| `ptyunit-bash5` | 5.2 | Covers current Bash 5 behavior on Alpine
+ |
 
 All images include Python 3. A failure in any version fails the matrix. Test files that
 call `ptyunit_require_bash` skip automatically in containers where bash is too old.
