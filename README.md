@@ -421,6 +421,69 @@ output, exit_code = run("examples/confirm.sh", ["y"], key_delay=0.1)
 
 ---
 
+## Code coverage
+
+```bash
+bash tests/ptyunit/coverage.sh --unit --src=src
+```
+
+Collects line-level code coverage by running each test file with bash's
+`set -x` and a custom `PS4` that logs `file:line` to a trace file.
+Works on bash 3.2 (no `BASH_XTRACEFD` required — xtrace goes to stderr,
+which is redirected to the trace file).
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--src=<dir>` | `src/` or `.` | Source directory to measure |
+| `--report=text` | ✓ | Plain text table to stdout |
+| `--report=json` | — | JSON report to stdout |
+| `--report=html` | — | HTML report to `coverage/index.html` with per-file source views |
+| `--min=<N>` | `0` | Exit 1 if total coverage is below N% (for CI) |
+| `--unit` | — | Only run unit tests |
+| `--integration` | — | Only run integration tests |
+
+### Example output
+
+```
+────────────────────────────────────────────────────────────────────────
+File                                           Lines    Hit   Miss    Cov
+────────────────────────────────────────────────────────────────────────
+scroll.sh                                        137    104     33    76%
+sync-scroll.sh                                    65     58      7    89%
+widgets/editor.sh                                802    577    225    72%
+widgets/diff-view.sh                             348      0    348     0%
+────────────────────────────────────────────────────────────────────────
+TOTAL                                           4084   1794   2290    44%
+────────────────────────────────────────────────────────────────────────
+```
+
+### HTML report
+
+```bash
+bash tests/ptyunit/coverage.sh --unit --src=src --report=html
+open coverage/index.html
+```
+
+Generates a browsable report with per-file source views. Executed lines
+are highlighted green, missed lines are highlighted red.
+
+### CI gating
+
+```bash
+bash tests/ptyunit/coverage.sh --unit --src=src --min=50
+```
+
+Exits 1 if total coverage falls below 50%.
+
+### Requirements
+
+- Python 3.6+ (for the report generator)
+- bash 3.2+ (same as ptyunit itself)
+
+---
+
 ## Docker cross-version matrix
 
 ```
