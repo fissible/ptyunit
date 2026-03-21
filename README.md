@@ -1,5 +1,7 @@
 # ptyunit
 
+[![tests](https://github.com/fissible/ptyunit/actions/workflows/test.yml/badge.svg)](https://github.com/fissible/ptyunit/actions/workflows/test.yml)
+
 Test your bash scripts. Even the interactive ones that take over the terminal.
 
 ```bash
@@ -27,12 +29,19 @@ OK  2/2 tests passed
 ## Install
 
 ```bash
+# Git submodule (recommended for projects)
 git submodule add https://github.com/fissible/ptyunit tests/ptyunit
+
+# Homebrew
+brew tap fissible/tap && brew install ptyunit
+
+# bpkg
+bpkg install fissible/ptyunit
 ```
 
 That's it. One file to source (`assert.sh`), one runner to call (`run.sh`), zero build steps.
 
-> **Other install options:** You can also `curl` the individual files, or copy the directory directly. There are no compiled artifacts or package manager dependencies. If you want to add Homebrew/bpkg/etc. support, PRs are welcome.
+> **Other install options:** You can also `curl` the individual files or copy the directory directly. There are no compiled artifacts. The Homebrew formula installs a `ptyunit` command in your PATH that wraps `run.sh`.
 
 ---
 
@@ -148,7 +157,10 @@ FAIL [string utils > upper > converts lowercase]
   actual:   'hello'
 ```
 
-> **What describe does and doesn't do:** `describe` is purely organizational — it prefixes test names for better output. It does not create variable isolation (no subshells). If you need isolated state per section, use `ptyunit_setup`/`ptyunit_teardown`.
+> **Describe is also a scope.** Pass optional setup/teardown functions:
+> `describe "name" setup_fn teardown_fn`. Nested describes accumulate — inner
+> tests get all outer setups (outermost first) and all teardowns (innermost first).
+> See "Set up and tear down" below.
 
 ### Set up and tear down per test
 
@@ -195,6 +207,66 @@ assert_true check_cgroups   # silently skipped
 ```
 
 > **How it works:** `ptyunit_skip` exits the whole file with code 3 (the runner shows it as SKIP). `ptyunit_skip_test` sets a flag that makes assertions silently pass-through until the next `test_that`.
+
+### Capture a command's output in one line
+
+Instead of manually juggling `$()` and `$?`:
+
+```bash
+test_that "deploy succeeds"
+run deploy_to_staging
+assert_eq "0" "$status"
+assert_contains "$output" "deployed"
+assert_eq "deployed to staging" "${lines[0]}"
+```
+
+`run` captures everything at once: `$output` (stdout+stderr), `$status` (exit code), and `$lines` (array, one element per line).
+
+> **Why this helps:** Without `run`, you'd write `out=$(cmd 2>&1); rc=$?` and manually split lines. With `run`, it's one call. The `$lines` array lets you check specific lines by index: `${lines[0]}` is the first line, `${lines[1]}` the second, etc.
+
+### Write your own assertions
+
+If the built-in assertions don't cover your case, make your own using `ptyunit_pass` and `ptyunit_fail`:
+
+```bash
+assert_valid_json() {
+    if echo "$1" | python3 -m json.tool > /dev/null 2>&1; then
+        ptyunit_pass
+    else
+        ptyunit_fail "expected valid JSON, got: $1"
+    fi
+}
+
+test_that "API returns JSON"
+run my_api_call
+assert_valid_json "$output"
+```
+
+These integrate with ptyunit's counters, skip flag, and failure reporting — your custom assertion behaves exactly like a built-in one.
+
+> **How it works:** `ptyunit_pass` increments the pass counter. `ptyunit_fail "message"` increments the fail counter and prints a formatted FAIL line with the current test name. Both respect `ptyunit_skip_test`.
+
+### Scoped setup with describe
+
+Describe blocks can carry their own setup and teardown functions. Nesting accumulates — inner tests get all outer setups.
+
+```bash
+_start_db()  { db_connect "test.db"; }
+_stop_db()   { db_disconnect; }
+_seed_users(){ db_exec "INSERT INTO users VALUES ('alice')"; }
+
+describe "database" _start_db _stop_db
+    describe "users" _seed_users
+        test_that "finds alice"
+        run db_query "SELECT name FROM users"
+        assert_contains "$output" "alice"
+    end_describe
+end_describe
+# _start_db ran before the test, then _seed_users.
+# After the test: _stop_db ran.
+```
+
+> **Setup order:** outermost first, then innermost. **Teardown order:** innermost first, then outermost (like stack unwinding). Describe-level setups run before each `test_that` inside the block — not once for the whole block.
 
 ---
 
@@ -247,6 +319,7 @@ Failed files:
 | `--format junit` | JUnit XML — for Jenkins, GitHub Actions, etc. |
 | `--debug` | Same as `--jobs 1 --verbose` — runs tests one by one |
 | `-v` / `--verbose` | Show timing for every file |
+| `--version` | Print version and exit |
 
 > **How parallelism works:** Tests run in a streaming worker pool using an fd-based semaphore. This is compatible with bash 3.2 — no `wait -n` or GNU `parallel` required. Files start as soon as a slot opens rather than waiting for all files to be discovered first.
 

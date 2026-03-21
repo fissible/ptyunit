@@ -1,0 +1,34 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit:
+    name: Unit tests (bash ${{ matrix.bash }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        bash: ['3.2', '4.4', '5.2']
+    container:
+      image: ${{ matrix.bash == '3.2' && 'bash:3.2' || matrix.bash == '4.4' && 'bash:4.4' || 'bash:5.2' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install python3
+        run: apk add --no-cache python3
+      - name: Run unit tests
+        run: bash run.sh --unit
+      - name: Run unit tests (TAP output)
+        run: bash run.sh --unit --format tap
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run all tests
+        run: bash run.sh --all
