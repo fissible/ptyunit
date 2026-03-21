@@ -15,317 +15,234 @@ Update task status here when work completes.
 ptyunit is a test framework for bash scripts and terminal UI applications. It has three
 independent layers that work together or standalone:
 
-1. **Assertion library** (`assert.sh`) — `assert_eq`, `assert_contains`, `assert_output`,
-   section labeling, pass/fail counters, and a summary function with a meaningful exit code.
-   Zero dependencies; source it and write tests.
+1. **Assertion library** (`assert.sh`) — 22 assertions (`assert_eq`, `assert_contains`,
+   `assert_match`, `assert_gt/lt/ge/le`, `assert_file_exists`, `assert_line`, etc.),
+   section labeling (`test_that`/`test_it`/`test_they`), `describe`/`end_describe` nesting,
+   `test_each` parameterized tests, per-test `ptyunit_setup`/`ptyunit_teardown`,
+   `ptyunit_skip_test` per-section skip, and PWD isolation. Auto-sources `mock.sh`.
 
-2. **PTY integration driver** (`pty_run.py`) — runs a bash script inside a real
+2. **Mock library** (`mock.sh`) — `ptyunit_mock` creates command mocks (PATH-based) or
+   function mocks (auto-detected). Records calls and arguments. 5 verification assertions
+   (`assert_called`, `assert_not_called`, `assert_called_times`, `assert_called_with`).
+   Heredoc bodies for smart mocks. Auto-cleanup at `test_that` boundaries.
+
+3. **PTY integration driver** (`pty_run.py`) — runs a bash script inside a real
    pseudoterminal (`pty.fork()`), scripts keystroke sequences into it, strips ANSI escapes,
    and returns plain text output. This is what makes it possible to test TUI applications
    that render to `/dev/tty` — something no other bash test framework supports.
 
-3. **Test runner** (`run.sh`) — discovers `tests/unit/test-*.sh` and
-   `tests/integration/test-*.sh`, runs each in a subshell, aggregates pass/fail counts,
-   and exits non-zero on any failure. Silently skips integration tests if `python3` is
-   absent.
+4. **Test runner** (`run.sh`) — discovers `tests/unit/test-*.sh` and
+   `tests/integration/test-*.sh`, runs each in a streaming worker pool, aggregates
+   pass/fail/skip counts. Supports `--filter` (filename), `--name` (test section name),
+   `--fail-fast`, `--format tap|junit|pretty`, `--jobs N`, `--debug`, `-h`/`--help`.
 
-4. **Docker cross-version matrix** (`tests/docker/`) — runs the full suite against bash
-   3.2 (simulates macOS), bash 4.4, and bash 5.x in isolated Alpine containers with
-   Python installed. A failure in any version is a bug.
+5. **Code coverage** (`coverage.sh` + `coverage_report.py`) — PS4-based line tracing,
+   text/json/html reports, `--min=N` CI gate. Works on bash 3.2.
 
----
+6. **Docker cross-version matrix** (`docker/`) — bash 3.2, 4.4, 5.x on Alpine.
 
-## Effort key
-
-| Symbol | Size | Time estimate |
-|--------|------|---------------|
-| XS     | Tiny | < 1 hour      |
-| S      | Small | 1–2 hours    |
-| M      | Medium | ~half day   |
-| L      | Large | ~1 day       |
-| XL     | X-Large | 2–3 days  |
+7. **Showdown benchmark** (`bench/showdown/`) — head-to-head comparison against bats-core
+   with equivalent test suites over 4 bash libraries. Measures pass/fail alignment and
+   timing. Result: 15x faster, full alignment.
 
 ---
 
-## Dependency graph
+## Current state
 
-```
-Phase 1 (core extraction — decouple from shellframe)
-    │
-    ├── Phase 2 (ptyunit's own unit tests — test assert.sh itself)
-    │
-    ├── Phase 3 (example fixture scripts — minimal bash scripts to drive via PTY)
-    │       │
-    │       └── Phase 4 (integration tests — drive examples with pty_run.py)
-    │
-    └── Phase 5 (documentation — README, API ref, integration guide)
-```
+**Self-tests:** 221/221 assertions across 13 unit + 2 integration files (231 total).
 
----
+**Core files:**
 
-## Phase 1 — Core Extraction
-> Decouple every component from shellframe naming. No new features — pure rename/extract.
-> These tasks are independent of each other and can be done in any order.
+| File | Lines | Purpose |
+|------|-------|---------|
+| `assert.sh` | ~400 | Assertion library + lifecycle + describe/params |
+| `mock.sh` | ~230 | Mocking and stubbing |
+| `run.sh` | ~380 | Test runner with TAP/JUnit/pretty output |
+| `pty_run.py` | ~160 | PTY driver |
+| `coverage.sh` | ~165 | Coverage orchestrator |
+| `coverage_report.py` | ~250 | Coverage report generator |
 
-| # | Task | Effort | GH Issue | Status |
-|---|------|--------|----------|--------|
-| 1 | Extract `assert.sh`: rename `shellframe_test_begin` → `ptyunit_test_begin`, `shellframe_test_summary` → `ptyunit_test_summary`, globals `_SHELLFRAME_TEST_*` → `_PTYUNIT_TEST_*` | XS | [#1](https://github.com/fissible/ptyunit/issues/1) | **done** |
-| 2 | Extract `run.sh`: rename header text, `SHELLFRAME_DIR` → `PTYUNIT_DIR`, update suite paths | XS | [#2](https://github.com/fissible/ptyunit/issues/2) | **done** |
-| 3 | Extract `pty_run.py`: update module docstring and project references only; no logic changes | XS | [#3](https://github.com/fissible/ptyunit/issues/3) | **done** |
-| 4 | Extract Docker matrix: rename image tags `shellframe-test-bash*` → `ptyunit-bash*`, `SHELLFRAME_DIR` → `PTYUNIT_DIR`, `WORKDIR /clui` → `WORKDIR /ptyunit` in all three Dockerfiles | S | [#4](https://github.com/fissible/ptyunit/issues/4) | **done** |
+**Self-test files:**
 
-**Coupling inventory — what changes in Phase 1:**
-
-| File | Coupling | Fix |
-|------|----------|-----|
-| `assert.sh` | `_SHELLFRAME_TEST_PASS/FAIL/NAME` globals; `shellframe_test_begin`; `shellframe_test_summary` | Rename to `_PTYUNIT_TEST_*`, `ptyunit_test_begin`, `ptyunit_test_summary` |
-| `run.sh` | Header prints `shellframe test runner`; internal var `SHELLFRAME_DIR` | Rename both |
-| `run-matrix.sh` | Image tags `shellframe-test-bash{3,4,5}`; var `SHELLFRAME_DIR` | Rename both |
-| `Dockerfile.bash{3,4,5}` | `WORKDIR /clui` | Change to `WORKDIR /ptyunit` |
-| `pty_run.py` | Docstring mentions shellframe | Update text only |
-
-**What does NOT change in Phase 1:**
-- `pty_run.py` logic — it is already fully generic (runs any bash script, knows nothing about shellframe)
-- All assertion logic in `assert.sh`
-- All runner logic in `run.sh`
-- All Docker build logic
-
----
-
-## Phase 2 — ptyunit Native Unit Tests
-> Test assert.sh's own behavior. These are the framework's self-tests.
-> Depends on: Phase 1 (renamed assert.sh)
-
-| # | Task | Effort | GH Issue | Status | Deps |
-|---|------|--------|----------|--------|------|
-| 5 | Write `tests/unit/test-assert.sh`: test `assert_eq` pass/fail output, `assert_contains` pass/fail, `assert_output` captures stdout, `ptyunit_test_summary` exit codes, counter accumulation across sections | S | [#5](https://github.com/fissible/ptyunit/issues/5) | **done** | 1 |
-
----
-
-## Phase 3 — Example Fixture Scripts
-> Minimal bash scripts that serve as both demos and PTY integration test fixtures.
-> These live in `examples/` and must work in bash 3.2+.
-> Depends on: Phase 1 (renamed pty_run.py, run.sh)
-
-| # | Task | Effort | GH Issue | Status | Deps |
-|---|------|--------|----------|--------|------|
-| 6 | Write `examples/confirm.sh`: yes/no prompt, prints `Confirmed` or `Cancelled` to stdout, renders to `/dev/tty` | XS | [#6](https://github.com/fissible/ptyunit/issues/6) | **done** | 1,2,3 |
-| 7 | Write `examples/menu.sh`: arrow-key navigable list, prints selected item to stdout, renders to `/dev/tty` | S | [#7](https://github.com/fissible/ptyunit/issues/7) | **done** | 1,2,3 |
-
-These examples must be self-contained (no shellframe dependency). They exist to
-demonstrate what ptyunit can test and to give integration tests something to drive.
-
----
-
-## Phase 4 — Integration Tests
-> Drive examples with `pty_run.py`, assert on stdout using `assert_contains`.
-> Depends on: Phase 2 (assert.sh), Phase 3 (example scripts)
-
-| # | Task | Effort | GH Issue | Status | Deps |
-|---|------|--------|----------|--------|------|
-| 8 | Write `tests/integration/test-confirm.sh`: drive `examples/confirm.sh` with `y`, `n`, `ENTER`, `ESC`; assert on `Confirmed`/`Cancelled` | XS | [#8](https://github.com/fissible/ptyunit/issues/8) | **done** | 5,6 |
-| 9 | Write `tests/integration/test-menu.sh`: drive `examples/menu.sh` with `ENTER`, `DOWN ENTER`, `q`; assert on selection output | S | [#9](https://github.com/fissible/ptyunit/issues/9) | **done** | 5,7 |
-
----
-
-## Phase 5 — Documentation
-> Depends on: Phase 4 (all components working end-to-end)
-
-| # | Task | Effort | GH Issue | Status | Deps |
-|---|------|--------|----------|--------|------|
-| 10 | Write `README.md`: what ptyunit is, install/usage quick start, `assert.sh` API reference, `pty_run.py` CLI reference (args, env vars, named keys, exit codes), link to examples | M | [#10](https://github.com/fissible/ptyunit/issues/10) | **done** | 8,9 |
-| 11 | Write `docs/integration-guide.md`: how to add ptyunit to an existing bash project (directory layout, sourcing assert.sh, writing unit vs integration tests, running the docker matrix) | S | [#11](https://github.com/fissible/ptyunit/issues/11) | **done** | 10 |
-
----
-
-## Phase 6 — Coverage & Test Health
-> Adds code coverage reporting and tooling to identify redundant tests.
-> Runs inside the Docker matrix (kcov is Linux-only).
-> Depends on: Phase 5
-
-| # | Task | Effort | GH Issue | Status | Deps |
-|---|------|--------|----------|--------|------|
-| 12 | Add `--coverage` flag to `run.sh`: run suite under kcov (bash) / coverage.py (pty_run.py); output to `coverage/` directory; document in README | M | — | **todo** | 10,11 |
-| 13 | Per-test coverage capture: run each test file individually under kcov; emit per-test `.json` coverage sets to `coverage/per-test/` | M | — | **todo** | 12 |
-| 14 | Redundancy detection tool (`tools/find-redundant.sh`): compare per-test coverage sets; report tests whose covered lines are a subset of another test's; cross-reference with hyperfine timing so the faster test is recommended as the keeper | L | — | **todo** | 13 |
-
----
-
-## Phase 7 — Assertion & Runner Parity
-> Closes the top feature gaps vs. BATS and shunit2.
-> Items are independent of Phase 6 and can be done in any order.
-> Depends on: Phase 5
-
-| # | Task | Effort | GH Issue | Status | Deps |
-|---|------|--------|----------|--------|------|
-| 15 | `setUp` / `tearDown` hooks: `setUp.sh` and `tearDown.sh` alongside test files; runner creates `PTYUNIT_TEST_TMPDIR` per file; tearDown always runs; setUp failure → SKIP | M | — | **done** | 10 |
-| 16 | JUnit XML + TAP output: `--format junit` and `--format tap` flags on `run.sh`; enables GitHub Actions test reporters, Jenkins, and any TAP consumer | S | — | **todo** | 10 |
-| 17 | Richer assertion suite in `assert.sh`: `assert_not_eq`, `assert_true`, `assert_false`, `assert_null`, `assert_not_null` | XS | — | **done** | 1 |
-| 18 | Colorized output in `run.sh`: green OK / yellow SKIP / red FAIL; respects `NO_COLOR`; `FORCE_COLOR=1` enables in non-TTY (CI) | XS | — | **done** | 10 |
-| 19 | Test skipping: `ptyunit_skip [reason]` function in `assert.sh`; `run.sh` counts and displays skipped files separately; useful for platform-conditional tests | S | — | **done** | 15 |
-
----
-
-## Prioritized Backlog — Scored
-
-> All candidate features (#12–19) scored and ranked. Use this to decide what to build next.
->
-> Scoring: **Impact** (1–5, how much it improves experience for users who need it) ×
-> **Reach** (1–5, how broadly the user base benefits) = **Core**. Plus a
-> **Differentiation bonus** (+5 unique to ptyunit, +2 gap vs. competitors, +0 parity).
-> Lower-effort items break ties.
-
-| Rank | # | Feature | Impact | Reach | Core | Diff | Total | Effort | Deps | Status |
-|------|---|---------|--------|-------|------|------|-------|--------|------|--------|
-| 1 | 15 | setUp / tearDown hooks | 5 | 5 | 25 | +2 | **27** | M | — | **done** |
-| 2 | 12 | `--coverage` flag | 5 | 3 | 15 | +5 | **20** | M | — | todo |
-| 3 | 16 | JUnit XML + TAP output | 4 | 4 | 16 | +2 | **18** | S | — | todo |
-| 4 | 17 | Richer assertions | 3 | 5 | 15 | +2 | **17** | XS | — | **done** |
-| 5 | 13 | Per-test coverage capture | 4 | 3 | 12 | +5 | **17** | M | 12 | todo |
-| 6 | 18 | Colorized output | 3 | 5 | 15 | +0 | **15** | XS | — | **done** |
-| 7 | 14 | Redundancy detection tool | 5 | 2 | 10 | +5 | **15** | L | 13 | todo |
-| 8 | 19 | Test skipping | 3 | 3 | 9 | +2 | **11** | S | 15 | **done** |
-
-**Notes:**
-- #17 and #18 are XS effort and unblocked — high ROI per hour even at ranks 4 and 6.
-- #12 → #13 → #14 is a prerequisite chain; start #12 before any coverage work.
-- #19 (test skipping) depends on #15 (setUp/tearDown) since both touch the per-file lifecycle.
-- Differentiation bonus reflects what neither BATS nor shunit2 offer (+5) vs. what they offer but ptyunit lacks (+2).
+| File | Assertions | Tests |
+|------|-----------|-------|
+| `test-assert.sh` | 20 | Original assertion functions |
+| `test-assert-extended.sh` | 23 | not_eq, true, false, null, not_null, skip, require_bash |
+| `test-assert-new.sh` | 30 | match, file_exists, line, gt/lt/ge/le (uses describe + test_each) |
+| `test-mock.sh` | 36 | Command mocks, function mocks, auto-cleanup, verification (uses describe) |
+| `test-describe.sh` | 12 | describe/end_describe nesting |
+| `test-params.sh` | 15 | test_each parameterized tests |
+| `test-name-filter.sh` | 8 | --name filter |
+| `test-runner.sh` | 21 | Runner core: jobs, parallel, skip, timing |
+| `test-runner-hooks.sh` | 8 | setUp/tearDown, PTYUNIT_TEST_TMPDIR, color |
+| `test-runner-filter.sh` | 14 | --filter, --fail-fast, --format validation |
+| `test-runner-format.sh` | 16 | TAP and JUnit output (uses describe) |
+| `test-setup-teardown.sh` | 8 | Per-test ptyunit_setup/teardown, PWD isolation |
+| `test-skip-test.sh` | 10 | Per-test ptyunit_skip_test |
 
 ---
 
 ## Milestones
 
-| Milestone | Condition | Status |
-|-----------|-----------|--------|
-| **M1: Standalone** | Phase 1 complete; all tests pass with ptyunit naming, no shellframe refs | **done** |
-| **M2: Self-tested** | Phase 2+3+4 complete; ptyunit tests its own components | **done** |
-| **M3: Public launch** | Phase 5 complete; README + guide published; Docker matrix green | **done** (Docker matrix untested — requires Docker) |
-| **M4: Coverage** | Phase 6 complete; `--coverage` flag works in Docker matrix; redundancy tool ships | **todo** |
-| **M5: Full parity** | Phase 7 complete; setUp/tearDown, JUnit/TAP, richer assertions, colorized output, skipping | **in progress** (#16 JUnit/TAP remaining) |
+| Milestone | Status |
+|-----------|--------|
+| **M1: Standalone** — extracted from shellframe, all tests pass | **done** |
+| **M2: Self-tested** — ptyunit tests its own components | **done** |
+| **M3: Public launch** — README + guide, Docker matrix green | **done** |
+| **M4: Coverage** — PS4-based coverage with text/json/html reports | **done** |
+| **M5: Full parity** — setUp/tearDown, JUnit/TAP, assertions, color, skipping | **done** |
+| **M6: Beyond parity** — mocking, describe, test_each, --name, --fail-fast, --help | **done** |
 
 ---
 
-## File layout (target)
+## Competitive position (as of 2026-03-20)
+
+| Capability | ptyunit | bats-core | shellspec | shunit2 |
+|---|---|---|---|---|
+| PTY / TUI testing | **Yes** | No | No | No |
+| Built-in mocking | **Yes (auto-cleanup)** | No (external) | Yes | No |
+| Parallel execution | Yes (built-in, bash 3.2) | Yes (GNU parallel) | Yes | No |
+| Code coverage | Yes (built-in PS4) | No (external kcov) | Yes (kcov) | No |
+| TAP output | Yes | Yes | Yes | No |
+| JUnit XML | Yes | Yes | Yes | No |
+| Parameterized tests | **Yes (test_each)** | No | Yes | No |
+| Nestable describe | **Yes** | No | Yes | No |
+| Test name filter | Yes (--name) | Yes (--filter) | Yes | Yes |
+| Fail-fast | Yes | Yes | Yes | No |
+| Numeric assertions | Yes (gt/lt/ge/le) | Manual | Matchers | No |
+| Speed (vs bats) | **15x faster** | Baseline | — | — |
+
+**Remaining gaps:** `run` helper (capture stdout+stderr+status in one call), negative
+line indices in assert_line, `refute_*` semantic inverses. All are nice-to-haves, not
+blockers.
+
+---
+
+## Backlog
+
+| # | Feature | Effort | Status |
+|---|---------|--------|--------|
+| 12 | Per-test coverage capture: run each test file individually; emit per-test coverage sets | M | todo |
+| 14 | Redundancy detection: compare per-test coverage sets; report subset tests | L | todo |
+| — | `run` helper: capture stdout+stderr+exit in one call like bats | S | todo |
+| — | `assert_line` negative indices (-1 = last line) | XS | todo |
+| — | `refute_output`, `refute_line` semantic inverses | XS | todo |
+| — | CI workflow (GitHub Actions) for ptyunit itself | S | todo |
+| — | Update `fissible/shellframe` to use ptyunit as submodule | S | todo |
+
+---
+
+## File layout
 
 ```
 ptyunit/
-├── assert.sh                        # assertion library
+├── assert.sh                        # assertion library + lifecycle + describe + test_each
+├── mock.sh                          # mocking and stubbing (auto-sourced by assert.sh)
 ├── run.sh                           # test runner
 ├── pty_run.py                       # PTY driver
+├── coverage.sh                      # coverage orchestrator
+├── coverage_report.py               # coverage report generator (text/json/html)
+├── README.md                        # user-facing docs
+├── PROJECT.md                       # this file
 ├── examples/
 │   ├── confirm.sh                   # minimal yes/no prompt demo
 │   └── menu.sh                      # minimal arrow-key menu demo
 ├── bench/
-│   └── concurrency.sh               # parallelism benchmark (not part of test suite)
-├── self-tests/                      # ptyunit's own tests (not run by consumers)
+│   ├── concurrency.sh               # parallelism benchmark
+│   └── showdown/                    # ptyunit vs bats-core benchmark
+│       ├── run-showdown.sh
+│       ├── lib/                     # 4 bash libraries under test
+│       ├── ptyunit/                 # ptyunit test suites
+│       └── bats/                    # equivalent bats test suites
+├── self-tests/
 │   ├── unit/
-│   │   └── test-assert.sh           # self-tests for assert.sh
+│   │   ├── test-assert.sh           # 20 assertions
+│   │   ├── test-assert-extended.sh  # 23 assertions
+│   │   ├── test-assert-new.sh       # 30 assertions (describe + test_each)
+│   │   ├── test-mock.sh             # 36 assertions (describe)
+│   │   ├── test-describe.sh         # 12 assertions
+│   │   ├── test-params.sh           # 15 assertions
+│   │   ├── test-name-filter.sh      # 8 assertions
+│   │   ├── test-runner.sh           # 21 assertions
+│   │   ├── test-runner-hooks.sh     # 8 assertions
+│   │   ├── test-runner-filter.sh    # 14 assertions
+│   │   ├── test-runner-format.sh    # 16 assertions (describe)
+│   │   ├── test-setup-teardown.sh   # 8 assertions
+│   │   └── test-skip-test.sh        # 10 assertions
 │   └── integration/
-│       ├── test-confirm.sh          # PTY-driven test of examples/confirm.sh
-│       └── test-menu.sh             # PTY-driven test of examples/menu.sh
+│       ├── test-confirm.sh          # 8 assertions (PTY)
+│       └── test-menu.sh             # 10 assertions (PTY)
 └── docker/
-    ├── run-matrix.sh                # orchestrates bash 3.2/4.4/5.x matrix
-    ├── Dockerfile.bash3             # bash 3.2 on Alpine 3.18
-    ├── Dockerfile.bash4             # bash 4.4 on Alpine 3.18
-    └── Dockerfile.bash5             # bash 5.2 (Alpine native)
+    ├── run-matrix.sh
+    ├── Dockerfile.bash3
+    ├── Dockerfile.bash4
+    └── Dockerfile.bash5
 ```
-
----
-
-## pty_run.py reference (preserve exactly — do not alter logic in Phase 1)
-
-```
-python3 pty_run.py <script> [KEY ...]
-```
-
-Named key tokens: `UP DOWN LEFT RIGHT ENTER SPACE ESC TAB SHIFT_TAB BACKSPACE DELETE HOME END PAGE_UP PAGE_DOWN`
-Hex literals: `\xNN`
-Literal characters: passed as-is
-
-Environment variables:
-| Variable    | Default | Description                        |
-|-------------|---------|-------------------------------------|
-| PTY_COLS    | 80      | Terminal width                     |
-| PTY_ROWS    | 24      | Terminal height                    |
-| PTY_DELAY   | 0.15    | Seconds between keystrokes         |
-| PTY_INIT    | 0.30    | Seconds before first key           |
-| PTY_TIMEOUT | 10      | Seconds to wait for child exit     |
-
-Exit codes: script's own exit code, or `124` on timeout.
 
 ---
 
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-18 (session 5)_
+_Last updated: 2026-03-20 (session 6)_
 
-**All phases complete. Repo is public. Docker matrix 3/3 green. shellql wired up.**
+**Major feature session. All milestones through M6 complete. 231/231 tests pass.**
 
-Completed 2026-03-18 (session 5 — output polish, aliases, bench, install docs):
-- `assert.sh`: added `test_that`, `test_it`, `test_they` as readable aliases for `ptyunit_test_begin`
-- `run.sh`: column-aligned test result output — filenames padded to longest name per suite so OK/FAIL/SKIP, assertion counts, and timing all land in the same column
-- `run.sh`: timing display now conditional — hidden for fast tests by default (< 1s); shown when `--verbose` or elapsed ≥ 1s; `--verbose` also adds `tests/second` rate
-- `run.sh`: `--debug` now enables verbose automatically (was `--jobs 1` only)
-- `run.sh`: header now reports worker count — `ptyunit test runner (4 workers)` or `(sequential)`
-- `self-tests/unit/test-runner.sh`: updated timing assertions to match new conditional display behaviour
-- `bench/concurrency.sh`: new script that synthesises N sleep-1 test files and benchmarks 1..nproc workers; not part of the regular test suite
-- `README.md`: install section rewritten — plain `curl` copy leads, submodule is secondary, PR invitation for package manager support (Homebrew/bpkg/Composer etc.); also updated: `greet` source example, confirm dialog visual, `--debug` in quick start, benchmark section, timing docs, `test_that`/`test_it`/`test_they` in API docs
-- Total self-tests: 72/72 pass
+Completed 2026-03-20 (session 6 — competitive parity + beyond):
 
-Completed 2026-03-18 (session 4 — UX polish: debug flag, timing, verbose):
-- `run.sh`: added `--debug` flag as alias for `--jobs 1` (sequential execution for debugging)
-- `run.sh`: added per-file elapsed time to output — `in X.X secs`; fast tests show `in < 0.1 secs`
-- `run.sh`: added `-v` / `--verbose` flag — appends `(N.NN tests/second)` when elapsed is measurable (>= 0.1s); omitted for fast tests to avoid misleading rates
-- `run.sh`: added `_ptyunit_now` helper — uses `$EPOCHREALTIME` on bash 5+, falls back to `date +%s`
-- `self-tests/unit/test-runner.sh`: expanded to 21 assertions; covers `--debug`, timing display, `-v`/`--verbose` flags
-- All scripts given execute permissions (`chmod +x`); pushed as separate commit
-- Total self-tests: 72/72 pass
+**Assertions & lifecycle:**
+- 7 new assertions: `assert_match`, `assert_file_exists`, `assert_line`, `assert_gt/lt/ge/le`
+- Per-test skip: `ptyunit_skip_test [reason]` — flag-based, resets at next `test_that`
+- Per-test setup/teardown: `ptyunit_setup`/`ptyunit_teardown` functions, auto-called at section boundaries
+- PWD isolation: save/restore `$PWD` between test sections
+- Consistent `|| true` on all arithmetic (fixes latent `set -e` bug in original `assert_eq`/`assert_contains`)
 
-Completed 2026-03-18 (session 3 — streaming worker pool, version gating, skip UI, README):
-- `run.sh`: dropped `--parallel`; replaced with always-on streaming worker pool. Jobs start as soon as a slot opens (scanner and workers interleaved). Uses fd-based semaphore (`mkfifo` + `exec 4<>`) for bash 3.2-compatible bounded parallelism — no `wait -n`, no polling.
-- `run.sh`: added `--jobs N` flag (default `nproc || 4`) with `while`/`shift` parsing; validates positive integer.
-- `assert.sh`: added `ptyunit_skip [reason]` (exits 3; runner counts separately, does not fail) and `ptyunit_require_bash MAJOR [MINOR]` (skips if running bash is older than required).
-- `self-tests/unit/test-runner.sh`: expanded to 14 assertions (was 8); covers `--jobs N` accepted, `--parallel` rejected exit 2, skip counting/display, `--jobs 1` sequential.
-- `self-tests/unit/test-assert-extended.sh`: expanded to 23 assertions (was 13); covers `ptyunit_skip`, `ptyunit_require_bash` (exit 3, output, major-only form).
-- Total self-tests: 75/75 pass
-- Tasks #15, #17, #18, #19 marked done; README updated and pushed (`e8cebb0`)
+**Runner:**
+- `--filter PATTERN` — filename substring match
+- `--name PATTERN` — test section name substring match (via `PTYUNIT_FILTER_NAME` env var)
+- `--fail-fast` — sentinel file IPC, stops dispatching on first failure
+- `--format tap` — TAP version 13 output
+- `--format junit` — JUnit XML output
+- `-h`/`--help` — usage statement
 
-Completed 2026-03-17 (session 2 — setUp/tearDown, richer assertions, color):
-- `run.sh`: setUp/tearDown hooks — `setUp.sh` and `tearDown.sh` placed alongside test files in the suite dir; runner creates `PTYUNIT_TEST_TMPDIR` (mktemp) per file, exports it to all three scripts; tearDown always runs even on test failure; setUp exit non-zero → SKIP + runner exits 1
-- `run.sh`: colorized output — green OK / yellow SKIP / red FAIL; TTY-detected; `NO_COLOR=1` suppresses; `FORCE_COLOR=1` enables in non-TTY (useful for CI)
-- `assert.sh`: added `assert_not_eq`, `assert_true`, `assert_false`, `assert_null`, `assert_not_null`
-- Added `self-tests/unit/test-runner-hooks.sh` (8 assertions) and `self-tests/unit/test-assert-extended.sh` (13 assertions, later expanded)
-- Tasks #15, #17, #18 marked done in backlog
+**Mocking (new file: mock.sh):**
+- `ptyunit_mock` — auto-detects function vs command mock
+- PATH-based command mocks, eval-based function mocks
+- Heredoc bodies for conditional mock behavior
+- Call recording (count + per-call args) to file-based state
+- Auto-cleanup at `test_that` boundaries (integrated into lifecycle)
+- 5 verification assertions + 2 query helpers
+- Auto-sourced by assert.sh
 
-Completed 2026-03-17 (session 1 — performance):
-- `run.sh`: replaced grep/cut/sed output parsing with `BASH_REMATCH` — eliminates 8 subprocess forks per test file
-- `run.sh`: replaced `$(basename "$f")` with `${f##*/}` — eliminates one fork per file
-- `run.sh`: replaced `sed 's/^/    /'` with a pure-bash `while read` loop
-- `run.sh`: added `|| true` guards on `(( ... ))` arithmetic to prevent `set -e` traps on zero-value results
-- Added `self-tests/unit/test-runner.sh` (8 assertions) covering sequential baseline and parallel aggregate behavior
+**Describe & parameterized tests:**
+- `describe`/`end_describe` — nestable name stack, produces `[outer > inner > test]` in output
+- `test_each` — pipe-delimited heredoc rows, one `test_that` section per row
 
-Completed 2026-03-15 (implementation session):
-- Phases 1–5: all files written, 38/38 tests pass — committed in `d683b90`
+**Benchmark:**
+- `bench/showdown/` — 4 bash libraries (math, string, filesystem, config parser)
+- Equivalent test suites in ptyunit (130 assertions) and bats-core (103 @tests)
+- Full pass/fail alignment, ptyunit 15x faster (873ms vs 13175ms)
+- `run-showdown.sh` orchestrator compares alignment and timing
 
-Completed 2026-03-16 (launch session):
-- Pushed to https://github.com/fissible/ptyunit (already public)
-- GitHub issues #1–11 confirmed pre-existing; all closed as completed
-- Docker matrix verified: bash 3.2 / 4.4 / 5.x — 38/38 each, 3/3 PASS
-- `fissible/shellql` wired up: ptyunit added as git submodule at `tests/ptyunit`
+**README:**
+- Complete rewrite with accessible tone
+- Technical details in blockquote callouts
+- Documents all features with concise code examples
 
-Completed 2026-03-16 (consumer API refactor):
-- Renamed `tests/` → `self-tests/` — ptyunit's own tests are now namespaced and invisible to consumers
-- `run.sh` auto-detects context via `pwd -P` vs `PTYUNIT_DIR`: consumer projects get `$(pwd)/tests`, ptyunit dev gets `self-tests/`
-- Consumer API is now just `bash tests/ptyunit/run.sh` — no wrapper needed
-- Removed `tests/run.sh` wrapper from shellql; updated shellql submodule to `17af4d1`
-- Updated README and integration-guide to reflect no-wrapper pattern
+**Bugs found during session:**
+1. Missing `|| true` on arithmetic in original `assert_eq`/`assert_contains` (latent `set -e` bug)
+2. Test fixture: wrong expected value in strlib replace test ("h-ll-" vs "hell-")
+3. Test fixture: macOS `$TMPDIR` trailing slash causing double-slash path mismatch
 
-**Notable fix (2026-03-15):** `read -n1` in bash treats `\n` as end-of-line and swallows it, so ENTER (sent as `\r`, translated to `\n` by TTY `icrnl`) produced empty `_key`. Fix: `read -r -d '' -n1` (null delimiter) in both example scripts' main input loops.
+**Self-tests: 72 → 231 assertions (13 unit + 2 integration files)**
+
+Previous sessions: see git history. Key commits:
+- `5441349` — assertions, lifecycle, TAP/JUnit, --filter, --fail-fast
+- `bf38c1a` — showdown benchmark
+- `30d69f2` — mocking, describe, test_each, --name, --help, README rewrite
 
 **Next steps:**
-1. #12: `--coverage` flag — slimmest portable Docker image, speed primary (P-3)
-2. #13: Per-test coverage capture (P-4)
-3. #16: JUnit XML + TAP output (P-5)
-4. Update `fissible/shellframe` to use ptyunit as a git submodule
+1. CI workflow (GitHub Actions) for ptyunit itself
+2. Per-test coverage capture + redundancy detection
+3. Update `fissible/shellframe` submodule
+4. Minor ergonomics: `run` helper, negative line indices, `refute_*`
