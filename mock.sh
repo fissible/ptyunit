@@ -37,7 +37,7 @@ _PTYUNIT_MOCK_DIR=""
 
 _ptyunit_mock_init() {
     if [[ -z "$_PTYUNIT_MOCK_DIR" ]]; then
-        _PTYUNIT_MOCK_DIR=$(mktemp -d "${TMPDIR%/}/ptyunit-mock.XXXXXX") || {
+        _PTYUNIT_MOCK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ptyunit-mock.XXXXXX") || {
             printf 'ptyunit: mktemp failed for mock directory\n' >&2
             return 1
         }
