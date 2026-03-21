@@ -1,422 +1,391 @@
 # ptyunit
 
-**Most bash test frameworks stop at stdout. That falls apart for interactive programs.**
-
-ptyunit tests what appears on screen. It runs your script inside a real pseudoterminal, 
-drives it with keystrokes, and returns clean text you can assert against. If your code 
-uses `/dev/tty`, menus, or TUIs, this is the layer you actually care about.
+Test your bash scripts. Even the interactive ones that take over the terminal.
 
 ```bash
-# Drive a TUI confirm dialog with keystrokes, assert on its output
-out=$(python3 pty_run.py examples/confirm.sh RIGHT ENTER)
-assert_contains "$out" "Cancelled"
+source tests/ptyunit/assert.sh
+
+test_that "math still works"
+assert_eq "4" "$(( 2 + 2 ))"
+
+greet() {
+  echo "Hello, " "$1"
+}
+test_that "my function greets people"
+assert_output "Hello, world" greet "world"
+
+ptyunit_test_summary
+```
+
+```
+$ bash tests/unit/test-math.sh
+OK  2/2 tests passed
 ```
 
 ---
 
-## What ptyunit provides
-
-**`assert.sh`** — a minimal bash assertion library. Source it, write tests, call
-`ptyunit_test_summary` at the end. No dependencies beyond bash itself.
-
-**`pty_run.py`** — the PTY driver. Runs any bash script inside a real pseudoterminal,
-injects named keystrokes (`UP`, `DOWN`, `ENTER`, `ESC`, `SPACE`, ...), drains and
-ANSI-strips the output, and returns it as plain text. Works with any TUI — shellframe,
-dialog, fzf, whiptail, or one you wrote yourself.
-
-**`run.sh`** — the test runner. Auto-detects context: when called from a consumer
-project root it discovers that project's `tests/unit/test-*.sh` and
-`tests/integration/test-*.sh`; when called from ptyunit's own root it runs ptyunit's
-self-tests. Runs all files through a streaming worker pool, aggregates results, exits
-non-zero on any failure. Silently skips integration tests if Python 3 is absent.
-
-**`docker/`** — a Docker cross-version matrix. Runs your full test suite against bash
-3.2 (the macOS default), bash 4.4, and bash 5.x in clean Alpine containers — all with
-Python installed. A failure in any version is a bug.
-
----
-
-## Quick start
-
-### Install
-
-ptyunit is a handful of files you source or invoke directly. The simplest install
-is a plain copy — no tooling required:
-
-```bash
-curl -fsSL https://github.com/fissible/ptyunit/archive/refs/heads/main.tar.gz \
-  | tar -xz --strip-components=1 -C tests/ptyunit/ --wildcards \
-      '*/assert.sh' '*/pty_run.py' '*/run.sh'
-```
-
-To pin a version and pull updates with git, use a submodule:
+## Install
 
 ```bash
 git submodule add https://github.com/fissible/ptyunit tests/ptyunit
 ```
 
-Package manager support (Homebrew, bpkg, Composer, etc.) is welcome via pull
-request — the library has no required build steps, so adding metadata files is
-straightforward.
+That's it. One file to source (`assert.sh`), one runner to call (`run.sh`), zero build steps.
 
-### Write a unit test
-
-The function under test:
-
-```bash
-# mylib.sh
-greet() { printf 'Hello, %s' "$1"; }
-```
-
-The test file:
-
-```bash
-#!/usr/bin/env bash
-# tests/unit/test-mylib.sh
-
-TESTS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-source "$TESTS_DIR/ptyunit/assert.sh"
-source "mylib.sh"
-
-test_that "greet returns correct string"
-assert_output "Hello, world" greet "world"
-
-test_that "greet handles empty name"
-assert_output "Hello, " greet ""
-
-ptyunit_test_summary
-```
-
-### Write a PTY integration test
-
-`myprompt.sh` is an interactive confirm dialog that renders directly to the
-terminal via `/dev/tty`. It looks like this when it runs:
-
-```
-Confirm? [ Yes ]   No      ← initial state; Yes is highlighted
-Confirm?   Yes    [ No  ]  ← after pressing RIGHT arrow
-```
-
-`pty_run.py` drives it inside a real pseudoterminal — injecting keystrokes,
-capturing everything that appears on screen, and returning stripped text. The
-test then asserts on keywords in that output:
-
-```bash
-#!/usr/bin/env bash
-# tests/integration/test-myprompt.sh
-
-TESTS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PTY_RUN="$TESTS_DIR/ptyunit/pty_run.py"
-SCRIPT="$TESTS_DIR/../examples/myprompt.sh"
-source "$TESTS_DIR/ptyunit/assert.sh"
-
-_pty() { python3 "$PTY_RUN" "$SCRIPT" "$@" 2>/dev/null; }
-
-test_it "confirms when y is pressed"
-assert_contains "$(_pty y)" "Confirmed"
-
-test_it "cancels when ESC is pressed"
-assert_contains "$(_pty ESC)" "Cancelled"
-
-test_it "navigates right then confirms"
-assert_contains "$(_pty RIGHT ENTER)" "Cancelled"   # RIGHT moves to No
-
-ptyunit_test_summary
-```
-
-### Run your tests
-
-```bash
-bash tests/ptyunit/run.sh                    # all suites
-bash tests/ptyunit/run.sh --unit             # unit tests only
-bash tests/ptyunit/run.sh --integration      # integration tests only
-bash tests/ptyunit/run.sh --jobs 8           # override worker count
-bash tests/ptyunit/run.sh --debug            # sequential + verbose (isolate failures)
-```
-
-### Benchmark worker concurrency
-
-```bash
-bash tests/ptyunit/bench/concurrency.sh      # 6 synthetic files, 1–nproc workers
-bash tests/ptyunit/bench/concurrency.sh 10   # use 10 files instead
-```
-
-Generates N test files that each sleep 1 second, runs the suite at every worker
-count from 1 to `nproc`, and prints wall-clock time and speedup. Not part of the
-regular test suite — run it manually when you want to measure parallelism.
-
-### Run the Docker cross-version matrix
-
-```bash
-bash tests/ptyunit/docker/run-matrix.sh
-```
+> **Other install options:** You can also `curl` the individual files, or copy the directory directly. There are no compiled artifacts or package manager dependencies. If you want to add Homebrew/bpkg/etc. support, PRs are welcome.
 
 ---
 
-## assert.sh API
+## What can it do?
+
+### Test regular bash functions
+
+Write your functions. Write tests. Get a pass/fail count.
 
 ```bash
-source path/to/assert.sh
+source tests/ptyunit/assert.sh
+source src/mylib.sh
+
+test_that "greet says hello"
+assert_output "Hello, world" greet "world"
+
+test_that "add does addition"
+result=$(add 3 4)
+assert_eq "7" "$result"
+assert_gt "$result" 0
+
+ptyunit_test_summary
 ```
 
-### Test lifecycle
+### Test interactive terminal programs
 
-#### `ptyunit_test_begin "description"` / `test_that` / `test_it` / `test_they`
-
-Sets the current test section label. All subsequent assertion failures print this label.
-`test_that`, `test_it`, and `test_they` are aliases — use whichever reads most naturally:
+Most test frameworks can only capture stdout. If your script opens `/dev/tty` for a menu, a prompt, or a TUI — they can't touch it. ptyunit can.
 
 ```bash
-test_that "greet returns correct string"
-test_it "handles an empty name"
-test_they "all return the correct prefix"
+# Drive a TUI with keystrokes, get back plain text
+out=$(python3 tests/ptyunit/pty_run.py my_menu.sh DOWN DOWN ENTER)
+assert_contains "$out" "You selected: cherry"
 ```
 
-#### `ptyunit_test_summary`
+> **How it works:** `pty_run.py` runs your script inside a real pseudoterminal (PTY), sends keystrokes like `UP`, `DOWN`, `ENTER`, `ESC`, strips all ANSI escape codes, and returns clean text. It supports any program that renders to a terminal — shellframe, dialog, fzf, whiptail, or your own.
 
-Prints `OK  N/M tests passed` or `FAIL  N/M tests passed (F failed)`.
-**Exits 0** if all assertions passed; **exits 1** if any failed.
-Always call this as the last line of every test file.
+### Mock external commands
 
-#### `ptyunit_skip ["reason"]`
+Replace any command with a fake. Record calls. Verify what happened. Mocks clean up automatically when the next test starts.
 
-Skips the remainder of the test file with an optional reason message. The runner
-displays the file as `SKIP` and does not count it as a failure. Useful for
-platform-conditional tests.
+```bash
+test_that "deploy pushes to staging"
+ptyunit_mock git --output "pushed"
+ptyunit_mock curl --exit 0
+
+deploy_to_staging
+
+assert_called git
+assert_called_with git "push" "origin" "staging"
+assert_called_times curl 1
+```
+
+Need the mock to do something smarter? Use a heredoc body:
+
+```bash
+test_that "handles git errors gracefully"
+ptyunit_mock git << 'MOCK'
+case "$1" in
+    push)   echo "error: rejected"; exit 1 ;;
+    status) echo "On branch main" ;;
+esac
+MOCK
+
+result=$(deploy_to_staging 2>&1)
+assert_contains "$result" "deploy failed"
+```
+
+> **Under the hood:** Command mocks create tiny executable scripts in a temp directory prepended to `$PATH`. Function mocks use `eval` to replace the function with a recording wrapper. Both record every call's arguments to files, which the `assert_called*` assertions read. Everything is cleaned up at the next `test_that` boundary — no manual teardown needed.
+
+### Run the same test with different inputs
+
+```bash
+_verify_add() {
+    assert_eq "$3" "$(( $1 + $2 ))"
+}
+
+test_each _verify_add << 'PARAMS'
+1|2|3
+10|20|30
+-1|1|0
+0|0|0
+PARAMS
+```
+
+Each row becomes its own test section. Fields are split on `|` and passed as `$1`, `$2`, `$3`, etc. to your callback.
+
+> **Details:** Lines starting with `#` are skipped (comments). Empty lines are skipped. If any row's callback fails an assertion, it's reported against that specific row.
+
+### Group tests with describe blocks
+
+```bash
+describe "string utils"
+    describe "upper"
+        test_that "converts lowercase"
+        assert_output "HELLO" str_upper "hello"
+
+        test_that "handles empty string"
+        assert_output "" str_upper ""
+    end_describe
+
+    describe "trim"
+        test_that "removes whitespace"
+        assert_output "hi" str_trim "  hi  "
+    end_describe
+end_describe
+```
+
+Failure output includes the full path:
+
+```
+FAIL [string utils > upper > converts lowercase]
+  expected: 'HELLO'
+  actual:   'hello'
+```
+
+> **What describe does and doesn't do:** `describe` is purely organizational — it prefixes test names for better output. It does not create variable isolation (no subshells). If you need isolated state per section, use `ptyunit_setup`/`ptyunit_teardown`.
+
+### Set up and tear down per test
+
+Define `ptyunit_setup` and `ptyunit_teardown` in your test file. They run automatically before and after each `test_that` section.
+
+```bash
+source tests/ptyunit/assert.sh
+
+_tmpdir=""
+ptyunit_setup()    { _tmpdir=$(mktemp -d); }
+ptyunit_teardown() { rm -rf "$_tmpdir"; }
+
+test_that "creates config file"
+my_init "$_tmpdir"
+assert_file_exists "$_tmpdir/config.ini"
+
+test_that "starts with empty log"
+my_init "$_tmpdir"
+assert_true test -f "$_tmpdir/app.log"
+result=$(cat "$_tmpdir/app.log")
+assert_null "$result"
+
+ptyunit_test_summary
+```
+
+> **Lifecycle order:** At each `test_that` boundary: teardown previous section, clean up mocks, restore working directory, then run setup for the new section. At `ptyunit_test_summary`: teardown the final section.
+
+### Skip tests conditionally
+
+Skip the whole file:
 
 ```bash
 [[ "$(uname)" == "Darwin" ]] || ptyunit_skip "macOS only"
+ptyunit_require_bash 4 3   # skip if bash < 4.3
 ```
 
-#### `ptyunit_require_bash MAJOR [MINOR]`
-
-Skips the test file if the running bash version is older than `MAJOR.MINOR`. Place at
-the top of any test file that uses features not available in older bash versions.
+Skip one section:
 
 ```bash
-ptyunit_require_bash 4 3   # skip on bash < 4.3
+test_that "feature X (linux only)"
+[[ "$(uname)" == "Linux" ]] || { ptyunit_skip_test "linux only"; }
+
+assert_true check_cgroups   # silently skipped
 ```
 
-In the Docker cross-version matrix, test files with version requirements automatically
-skip in containers where bash is too old — no manual filtering needed.
+> **How it works:** `ptyunit_skip` exits the whole file with code 3 (the runner shows it as SKIP). `ptyunit_skip_test` sets a flag that makes assertions silently pass-through until the next `test_that`.
 
 ---
 
-### Equality
-
-#### `assert_eq "$expected" "$actual" ["$msg"]`
-
-Fails if the two strings differ.
-
-```
-FAIL [section] — msg
-  expected: 'hello'
-  actual:   'world'
-```
-
-#### `assert_not_eq "$unexpected" "$actual" ["$msg"]`
-
-Fails if the two strings are equal.
-
----
-
-### Substrings
-
-#### `assert_contains "$haystack" "$needle" ["$msg"]`
-
-Fails if `$needle` is not a substring of `$haystack`. The primary assertion for PTY
-integration tests — assert on a word that appears in stripped terminal output.
-
-#### `assert_not_contains "$haystack" "$needle" ["$msg"]`
-
-Fails if `$needle` is found in `$haystack`.
-
----
-
-### Commands
-
-#### `assert_output "$expected" command [args...]`
-
-Runs `command [args...]` in a subshell, captures stdout, compares with `assert_eq`.
-stderr is discarded.
-
-#### `assert_true command [args...]`
-
-Fails if `command` exits non-zero.
+## Running tests
 
 ```bash
-assert_true test -f "$config_file"
-assert_true grep -q "pattern" "$file"
+bash tests/ptyunit/run.sh                          # everything
+bash tests/ptyunit/run.sh --unit                   # unit tests only
+bash tests/ptyunit/run.sh --filter auth            # only files matching "auth"
+bash tests/ptyunit/run.sh --name "login"           # only test sections matching "login"
+bash tests/ptyunit/run.sh --fail-fast              # stop on first failure
+bash tests/ptyunit/run.sh --format tap             # TAP output for CI
+bash tests/ptyunit/run.sh --format junit           # JUnit XML for CI
+bash tests/ptyunit/run.sh --debug                  # sequential + verbose
 ```
 
-#### `assert_false command [args...]`
-
-Fails if `command` exits zero.
-
-```bash
-assert_false test -f "$should_not_exist"
-```
-
----
-
-### Values
-
-#### `assert_null "$value" ["$msg"]`
-
-Fails if `$value` is non-empty.
-
-#### `assert_not_null "$value" ["$msg"]`
-
-Fails if `$value` is empty.
-
----
-
-## run.sh
+Sample output:
 
 ```
-bash run.sh [--unit | --integration | --all] [--jobs N]
+ptyunit test runner (4 workers)
+
+Unit tests:
+  test-auth.sh    ... OK (12/12)
+  test-config.sh  ... OK (8/8)
+  test-deploy.sh  ... FAIL
+    FAIL [deploy > push] — unexpected branch
+      expected: 'staging'
+      actual:   'main'
+  test-utils.sh   ... OK (15/15) in 1.2 secs
+
+─────────────────────────────────
+35/36 assertions passed across 4 file(s)
+Failed files:
+  test-deploy.sh
 ```
 
-Discovers test files by glob (`tests/unit/test-*.sh`, `tests/integration/test-*.sh`).
-Runs them through a streaming worker pool and aggregates pass/fail/skip counts.
-Exits 0 only if all non-skipped files pass.
+### Runner options
 
-Integration tests are silently skipped if `python3` is not in PATH.
+| Flag | What it does |
+|------|--------------|
+| `--unit` | Unit tests only (`tests/unit/test-*.sh`) |
+| `--integration` | Integration tests only (`tests/integration/test-*.sh`) |
+| `--all` | Both (default) |
+| `--jobs N` | Max parallel test files (default: number of CPU cores) |
+| `--filter PATTERN` | Only run files whose name contains PATTERN |
+| `--name PATTERN` | Only run test sections whose name contains PATTERN |
+| `--fail-fast` | Stop after the first failure |
+| `--format pretty` | Human-readable output (default) |
+| `--format tap` | TAP version 13 — for CI tools that speak TAP |
+| `--format junit` | JUnit XML — for Jenkins, GitHub Actions, etc. |
+| `--debug` | Same as `--jobs 1 --verbose` — runs tests one by one |
+| `-v` / `--verbose` | Show timing for every file |
 
-### Options
+> **How parallelism works:** Tests run in a streaming worker pool using an fd-based semaphore. This is compatible with bash 3.2 — no `wait -n` or GNU `parallel` required. Files start as soon as a slot opens rather than waiting for all files to be discovered first.
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--unit` | — | Run unit tests only |
-| `--integration` | — | Run integration tests only |
-| `--all` | ✓ | Run all suites (default) |
-| `--jobs N` | `nproc \|\| 4` | Max concurrent test files |
-| `--debug` | — | Sets `--jobs 1` and enables verbose; sequential execution for isolating failures |
-| `-v`, `--verbose` | — | Show elapsed time for all files; add `tests/second` rate when elapsed ≥ 0.1s |
+### File-level setUp / tearDown
 
-### Timing
-
-Elapsed time is shown only when it matters — when a file takes ≥ 1 second, or
-verbose mode is active. Fast tests stay clean:
-
-```
-  test-assert.sh ... OK (20/20)
-  test-confirm.sh ... OK (8/8) in 6.0 secs
-```
-
-Pass `-v` / `--verbose` to show timing for all files, plus throughput when
-elapsed time is measurable:
+Place `setUp.sh` and/or `tearDown.sh` alongside your `test-*.sh` files:
 
 ```
-  test-assert.sh  ... OK (20/20) in < 0.1 secs
-  test-confirm.sh ... OK (8/8) in 6.0 secs (1.33 tests/second)
+tests/unit/
+  setUp.sh         # runs before each test-*.sh
+  tearDown.sh      # runs after each test-*.sh (even on failure)
+  test-foo.sh
+  test-bar.sh
 ```
 
-### Concurrency
+Both receive `$PTYUNIT_TEST_TMPDIR` — a temporary directory created and cleaned up by the runner.
 
-Tests run in a streaming worker pool: each file starts as soon as a slot is free rather
-than waiting for the full list to be collected first. `--debug` (or `--jobs 1`) gives
-sequential execution, useful for isolating failures.
-
-### setUp and tearDown
-
-Place `setUp.sh` and/or `tearDown.sh` alongside your test files in the suite directory.
-
-- `setUp.sh` runs before each test file. If it exits non-zero, that file is skipped and
-  counted as a failure.
-- `tearDown.sh` runs after each test file, even if the test failed.
-- Both scripts receive `PTYUNIT_TEST_TMPDIR` — a per-test temporary directory created
-  by the runner and automatically cleaned up after tearDown. Use it to share state
-  between setUp, the test, and tearDown without hardcoding paths.
-
-```
-tests/
-└── unit/
-    ├── setUp.sh          # runs before each test-*.sh
-    ├── tearDown.sh       # runs after each test-*.sh
-    ├── test-foo.sh
-    └── test-bar.sh
-```
-
-```bash
-# tests/unit/setUp.sh
-cp fixture.db "$PTYUNIT_TEST_TMPDIR/test.db"
-
-# tests/unit/test-foo.sh
-source "$TESTS_DIR/ptyunit/assert.sh"
-assert_true test -f "$PTYUNIT_TEST_TMPDIR/test.db"
-ptyunit_test_summary
-
-# tests/unit/tearDown.sh
-rm -f "$PTYUNIT_TEST_TMPDIR/test.db"
-```
-
-### Skip handling
-
-Test files that call `ptyunit_skip` or `ptyunit_require_bash` exit with code 3. The
-runner displays them as `SKIP`, lists them under "Skipped: N file(s)" in the summary,
-and does not count them as failures.
+> **If setUp fails** (non-zero exit), that test file is skipped and shown as SKIP in the output.
 
 ### Color
 
-Output is colorized (green OK / yellow SKIP / red FAIL) when stdout is a TTY.
+Green OK, yellow SKIP, red FAIL — automatically when stdout is a terminal.
 
 | Variable | Effect |
 |----------|--------|
-| `NO_COLOR=1` | Suppress all color |
-| `FORCE_COLOR=1` | Enable color even when stdout is not a TTY (e.g. CI) |
+| `NO_COLOR=1` | Turn off all color |
+| `FORCE_COLOR=1` | Force color even in CI (non-TTY) |
 
 ---
 
-## pty_run.py CLI
+## Assertions
 
+All assertions accept an optional trailing message: `assert_eq "a" "b" "should match"`.
+
+### Equality
+
+```bash
+assert_eq "expected" "$actual"          # strings must be equal
+assert_not_eq "wrong" "$actual"         # strings must differ
 ```
+
+### Substrings
+
+```bash
+assert_contains "$text" "needle"        # text must include needle
+assert_not_contains "$text" "secret"    # text must NOT include secret
+```
+
+### Patterns
+
+```bash
+assert_match "^v[0-9]+\.[0-9]+" "$version"   # regex must match
+```
+
+### Commands
+
+```bash
+assert_output "Hello" greet "world"     # stdout of greet("world") must equal "Hello"
+assert_true  test -f "$config"          # command must exit 0
+assert_false test -d "$nonexistent"     # command must exit non-zero
+```
+
+### Values
+
+```bash
+assert_null "$result"                   # must be empty string
+assert_not_null "$result"               # must be non-empty
+```
+
+### Files
+
+```bash
+assert_file_exists "$path"              # regular file must exist
+```
+
+### Lines
+
+```bash
+output=$'line1\nline2\nline3'
+assert_line "line2" 2 "$output"         # 2nd line must equal "line2"
+```
+
+> **Lines are 1-indexed**, matching `sed`, `awk`, and human intuition.
+
+### Numbers
+
+```bash
+assert_gt "$count" 5                    # count > 5
+assert_lt "$count" 100                  # count < 100
+assert_ge "$count" 1                    # count >= 1
+assert_le "$count" 99                   # count <= 99
+```
+
+> **These are integer comparisons** using bash arithmetic. They don't handle floats.
+
+### Mocks
+
+```bash
+assert_called "curl"                    # curl was called at least once
+assert_not_called "docker"              # docker was never called
+assert_called_times "curl" 3            # curl was called exactly 3 times
+assert_called_with "curl" "-s" "url"    # last curl call had these args
+```
+
+Use `mock_args <name> [N]` and `mock_call_count <name>` for custom checks.
+
+---
+
+## PTY driver
+
+```bash
 python3 pty_run.py <script> [KEY ...]
 ```
 
-Runs `bash <script>` inside a real pseudoterminal. Sends each `KEY` as a keystroke
-after the init delay. Prints ANSI-stripped output to stdout.
+Runs `bash <script>` inside a real pseudoterminal, sends each KEY as a keystroke, and prints ANSI-stripped text to stdout.
 
-### Named key tokens
+### Keys
 
-| Token | Meaning |
-|-------|---------|
-| `UP` `DOWN` `LEFT` `RIGHT` | Arrow keys |
-| `ENTER` | Return / confirm |
-| `SPACE` | Space bar |
-| `ESC` | Escape |
-| `TAB` | Tab |
-| `SHIFT_TAB` | Shift+Tab |
-| `BACKSPACE` | Delete before cursor |
-| `DELETE` | Delete at cursor |
-| `HOME` `END` | Line start / end |
-| `PAGE_UP` `PAGE_DOWN` | Page navigation |
+`UP` `DOWN` `LEFT` `RIGHT` `ENTER` `SPACE` `ESC` `TAB` `SHIFT_TAB` `BACKSPACE` `DELETE` `HOME` `END` `PAGE_UP` `PAGE_DOWN`
 
-Hex literals (`\x01`) and literal characters (`a`, `q`) are also accepted.
+Single characters (`a`, `q`, `1`) and hex escapes (`\x1b`) also work.
 
-### Environment variables
+### Tuning
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PTY_COLS` | `80` | Terminal width |
-| `PTY_ROWS` | `24` | Terminal height |
-| `PTY_DELAY` | `0.15` | Seconds between keystrokes |
-| `PTY_INIT` | `0.30` | Seconds before first keystroke |
-| `PTY_TIMEOUT` | `10` | Seconds to wait for child to exit |
+| Variable | Default | What it controls |
+|----------|---------|-----------------|
+| `PTY_COLS` | 80 | Terminal width |
+| `PTY_ROWS` | 24 | Terminal height |
+| `PTY_DELAY` | 0.15 | Seconds between keystrokes |
+| `PTY_INIT` | 0.30 | Seconds before first keystroke (let the UI render) |
+| `PTY_TIMEOUT` | 10 | Max seconds to wait for the script to exit |
 
-### Exit codes
-
-The exit code of the script itself is propagated. `124` is returned on timeout
-(matches GNU `timeout` convention).
+> **Exit codes:** The script's own exit code is returned. 124 means timeout (matching GNU `timeout`).
 
 ### Python API
 
-`pty_run.py` is also importable:
-
 ```python
-from pty_run import run, parse_key
-
-output, exit_code = run("examples/confirm.sh", ["y"], key_delay=0.1)
+from pty_run import run
+output, exit_code = run("my_menu.sh", ["DOWN", "ENTER"], key_delay=0.1)
 ```
 
 ---
@@ -427,97 +396,68 @@ output, exit_code = run("examples/confirm.sh", ["y"], key_delay=0.1)
 bash tests/ptyunit/coverage.sh --unit --src=src
 ```
 
-Collects line-level code coverage by running each test file with bash's
-`set -x` and a custom `PS4` that logs `file:line` to a trace file.
-Works on bash 3.2 (no `BASH_XTRACEFD` required — xtrace goes to stderr,
-which is redirected to the trace file).
-
-### Options
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--src=<dir>` | `src/` or `.` | Source directory to measure |
-| `--report=text` | ✓ | Plain text table to stdout |
-| `--report=json` | — | JSON report to stdout |
-| `--report=html` | — | HTML report to `coverage/index.html` with per-file source views |
-| `--min=<N>` | `0` | Exit 1 if total coverage is below N% (for CI) |
-| `--unit` | — | Only run unit tests |
-| `--integration` | — | Only run integration tests |
-
-### Example output
+Measures which lines of your source code actually ran during tests.
 
 ```
-────────────────────────────────────────────────────────────────────────
-File                                           Lines    Hit   Miss    Cov
-────────────────────────────────────────────────────────────────────────
-scroll.sh                                        137    104     33    76%
-sync-scroll.sh                                    65     58      7    89%
-widgets/editor.sh                                802    577    225    72%
-widgets/diff-view.sh                             348      0    348     0%
-────────────────────────────────────────────────────────────────────────
-TOTAL                                           4084   1794   2290    44%
-────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────
+File                        Lines    Hit   Miss    Cov
+────────────────────────────────────────────────────────────
+auth.sh                        85     72     13    85%
+config.sh                      64     64      0   100%
+deploy.sh                     120     45     75    38%
+────────────────────────────────────────────────────────────
+TOTAL                         269    181     88    67%
+────────────────────────────────────────────────────────────
 ```
 
-### HTML report
+| Flag | What it does |
+|------|--------------|
+| `--src=<dir>` | Which directory to measure (default: `src/` or `.`) |
+| `--report=text` | Table to stdout (default) |
+| `--report=json` | JSON to stdout |
+| `--report=html` | Browsable HTML report at `coverage/index.html` |
+| `--min=N` | Fail if coverage is below N% (for CI gates) |
 
-```bash
-bash tests/ptyunit/coverage.sh --unit --src=src --report=html
-open coverage/index.html
-```
-
-Generates a browsable report with per-file source views. Executed lines
-are highlighted green, missed lines are highlighted red.
-
-### CI gating
-
-```bash
-bash tests/ptyunit/coverage.sh --unit --src=src --min=50
-```
-
-Exits 1 if total coverage falls below 50%.
-
-### Requirements
-
-- Python 3.6+ (for the report generator)
-- bash 3.2+ (same as ptyunit itself)
+> **How it works:** Each test file runs with `set -x` and a custom `PS4` that logs `file:line` to a trace file. A Python script then cross-references the trace against your source files. Works on bash 3.2 — no special tools needed.
 
 ---
 
 ## Docker cross-version matrix
 
-```
+```bash
 bash docker/run-matrix.sh [--no-cache]
 ```
 
-Builds and runs three images:
+Runs your full test suite on bash 3.2, 4.4, and 5.x in Alpine containers. Tests that call `ptyunit_require_bash` skip automatically in containers where bash is too old.
 
-| Image | Bash version | Notes |
-|-------|-------------|-------|
-| `ptyunit-bash3` | 3.2 |  Matches the Bash version shipped on stock macOS |
+> **Why this matters:** bash 3.2 ships on macOS. If you write `declare -A` (associative arrays, bash 4+), your script breaks for every Mac user who hasn't installed a newer bash. The matrix catches this before they do.
 
-| `ptyunit-bash4` | 4.4 | Covers Bash 4-era features |
-| `ptyunit-bash5` | 5.2 | Covers current Bash 5 behavior on Alpine
- |
+---
 
-All images include Python 3. A failure in any version fails the matrix. Test files that
-call `ptyunit_require_bash` skip automatically in containers where bash is too old.
+## Project layout
+
+```
+your-project/
+  src/
+    mylib.sh
+  tests/
+    ptyunit/           # git submodule
+    unit/
+      test-mylib.sh
+    integration/
+      test-myui.sh
+```
 
 ---
 
 ## Compatibility
 
-- **Bash:** 3.2, 4.x, 5.x
-- **Python:** 3.6+ (for `pty_run.py`)
-- **OS:** Linux, macOS
-- **Dependencies:** none beyond bash and python3
-
----
-
-## Examples
-
-See [`examples/`](examples/) for minimal self-contained bash scripts that demonstrate
-PTY-testable TUI patterns.
+| | Supported |
+|---|---|
+| **Bash** | 3.2, 4.x, 5.x |
+| **Python** | 3.6+ (for PTY driver and coverage reports) |
+| **OS** | Linux, macOS |
+| **Dependencies** | None |
 
 ---
 

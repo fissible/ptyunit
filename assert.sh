@@ -16,30 +16,59 @@
 #   Call ptyunit_skip_test [reason] to skip remaining assertions in the
 #   current section. The next test_that/test_it/test_they resets the flag.
 
+# Auto-source mock.sh if present
+_ptyunit_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+if [[ -f "$_ptyunit_self_dir/mock.sh" ]]; then
+    source "$_ptyunit_self_dir/mock.sh"
+fi
+
 _PTYUNIT_TEST_PASS=0
 _PTYUNIT_TEST_FAIL=0
 _PTYUNIT_TEST_SKIP=0
 _PTYUNIT_TEST_NAME=""
 _PTYUNIT_SKIP_CURRENT=0
 _PTYUNIT_SAVED_PWD=""
+_PTYUNIT_SECTION_FILTERED=0
+_PTYUNIT_DESCRIBE_STACK=""
 
 # Begin a named test section. Manages per-test lifecycle:
-#   1. Teardown previous section (if ptyunit_teardown is defined)
-#   2. Restore working directory
-#   3. Reset skip flag
-#   4. Save current working directory
-#   5. Setup new section (if ptyunit_setup is defined)
+#   1. Teardown previous section (if not filtered out)
+#   2. Clean up mocks
+#   3. Restore working directory
+#   4. Set name (with describe prefix if applicable)
+#   5. Check name filter (PTYUNIT_FILTER_NAME)
+#   6. Save working directory
+#   7. Setup new section (if ptyunit_setup is defined)
 ptyunit_test_begin() {
-    if [[ -n "$_PTYUNIT_TEST_NAME" ]]; then
+    # Lifecycle for previous section (skip if it was filtered out)
+    if [[ -n "$_PTYUNIT_TEST_NAME" ]] && (( ! _PTYUNIT_SECTION_FILTERED )); then
         if declare -f ptyunit_teardown > /dev/null 2>&1; then
             ptyunit_teardown
+        fi
+        if declare -f _ptyunit_mock_cleanup_all > /dev/null 2>&1; then
+            _ptyunit_mock_cleanup_all
         fi
         if [[ -n "$_PTYUNIT_SAVED_PWD" ]]; then
             cd "$_PTYUNIT_SAVED_PWD" 2>/dev/null || true
         fi
     fi
-    _PTYUNIT_TEST_NAME="$1"
+
+    # Build the full test name (with describe prefix)
+    if [[ -n "$_PTYUNIT_DESCRIBE_STACK" ]]; then
+        _PTYUNIT_TEST_NAME="$_PTYUNIT_DESCRIBE_STACK > $1"
+    else
+        _PTYUNIT_TEST_NAME="$1"
+    fi
     _PTYUNIT_SKIP_CURRENT=0
+    _PTYUNIT_SECTION_FILTERED=0
+
+    # Name filter: silently skip non-matching sections
+    if [[ -n "${PTYUNIT_FILTER_NAME:-}" ]] && [[ "$_PTYUNIT_TEST_NAME" != *"$PTYUNIT_FILTER_NAME"* ]]; then
+        _PTYUNIT_SKIP_CURRENT=1
+        _PTYUNIT_SECTION_FILTERED=1
+        return
+    fi
+
     _PTYUNIT_SAVED_PWD="$PWD"
     if declare -f ptyunit_setup > /dev/null 2>&1; then
         ptyunit_setup
@@ -49,6 +78,52 @@ ptyunit_test_begin() {
 test_that() { ptyunit_test_begin "$@"; }
 test_it()   { ptyunit_test_begin "$@"; }
 test_they() { ptyunit_test_begin "$@"; }
+
+# ── Describe blocks (nestable naming) ───────────────────────────────────────
+# Group tests under a label. Nests arbitrarily. Test names become:
+#   [outer > inner > test name]
+
+describe() {
+    if [[ -n "$_PTYUNIT_DESCRIBE_STACK" ]]; then
+        _PTYUNIT_DESCRIBE_STACK+=" > $1"
+    else
+        _PTYUNIT_DESCRIBE_STACK="$1"
+    fi
+}
+
+end_describe() {
+    if [[ "$_PTYUNIT_DESCRIBE_STACK" == *" > "* ]]; then
+        _PTYUNIT_DESCRIBE_STACK="${_PTYUNIT_DESCRIBE_STACK% > *}"
+    else
+        _PTYUNIT_DESCRIBE_STACK=""
+    fi
+}
+
+# ── Parameterized tests ─────────────────────────────────────────────────────
+# Run a callback once per line from stdin. Fields are split on |.
+#
+# Usage:
+#   test_each <callback> << 'PARAMS'
+#   input1|input2|expected
+#   input3|input4|expected
+#   PARAMS
+#
+# The callback receives each field as $1, $2, $3, etc.
+# A test_that section is created for each row, named after the callback
+# and the raw parameter line.
+# Lines starting with # are skipped.
+
+test_each() {
+    local callback="$1"
+    local _ptyunit_pline
+    while IFS= read -r _ptyunit_pline || [[ -n "$_ptyunit_pline" ]]; do
+        [[ -z "$_ptyunit_pline" || "$_ptyunit_pline" == \#* ]] && continue
+        local _ptyunit_params=()
+        IFS='|' read -ra _ptyunit_params <<< "$_ptyunit_pline"
+        ptyunit_test_begin "$callback (${_ptyunit_pline})"
+        "$callback" "${_ptyunit_params[@]}"
+    done
+}
 
 # Skip the current test section. Assertions are silently skipped until the
 # next test_that / test_it / test_they call.
@@ -339,10 +414,13 @@ assert_le() {
 
 # Print a summary line and exit 1 if any tests failed.
 ptyunit_test_summary() {
-    # Teardown the final test section
-    if [[ -n "$_PTYUNIT_TEST_NAME" ]]; then
+    # Teardown the final test section (skip if it was filtered out)
+    if [[ -n "$_PTYUNIT_TEST_NAME" ]] && (( ! _PTYUNIT_SECTION_FILTERED )); then
         if declare -f ptyunit_teardown > /dev/null 2>&1; then
             ptyunit_teardown
+        fi
+        if declare -f _ptyunit_mock_cleanup_all > /dev/null 2>&1; then
+            _ptyunit_mock_cleanup_all
         fi
         if [[ -n "$_PTYUNIT_SAVED_PWD" ]]; then
             cd "$_PTYUNIT_SAVED_PWD" 2>/dev/null || true

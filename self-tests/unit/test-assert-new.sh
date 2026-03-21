@@ -7,102 +7,121 @@ PTYUNIT_DIR="$(cd "$TESTS_DIR/.." && pwd)"
 
 source "$PTYUNIT_DIR/assert.sh"
 
-# ── assert_match ─────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+describe "assert_match"
 
-ptyunit_test_begin "assert_match: anchored regex passes"
-assert_match "^hello" "hello world"
+    test_that "anchored regex passes"
+    assert_match "^hello" "hello world"
 
-ptyunit_test_begin "assert_match: digit pattern passes"
-assert_match "[0-9]+" "abc123"
+    test_that "digit pattern passes"
+    assert_match "[0-9]+" "abc123"
 
-ptyunit_test_begin "assert_match: failure outputs FAIL"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_match '^xyz' 'hello'" 2>&1)
-assert_contains "$out" "FAIL"
+    test_that "failure outputs FAIL"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_match '^xyz' 'hello'" 2>&1)
+    assert_contains "$out" "FAIL"
 
-ptyunit_test_begin "assert_match: failure shows pattern"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_match '^xyz' 'hello'" 2>&1)
-assert_contains "$out" "xyz"
+    test_that "failure shows pattern"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_match '^xyz' 'hello'" 2>&1)
+    assert_contains "$out" "xyz"
 
-# ── assert_file_exists ───────────────────────────────────────────────────────
+end_describe
 
-ptyunit_test_begin "assert_file_exists: existing file passes"
-_tmpf=$(mktemp)
-assert_file_exists "$_tmpf"
-rm -f "$_tmpf"
+# ═════════════════════════════════════════════════════════════════════════════
+describe "assert_file_exists"
 
-ptyunit_test_begin "assert_file_exists: missing file outputs FAIL"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_file_exists '/no/such/file'" 2>&1)
-assert_contains "$out" "FAIL"
+    test_that "existing file passes"
+    _tmpf=$(mktemp)
+    assert_file_exists "$_tmpf"
+    rm -f "$_tmpf"
 
-ptyunit_test_begin "assert_file_exists: failure shows path"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_file_exists '/no/such/file'" 2>&1)
-assert_contains "$out" "/no/such/file"
+    test_that "missing file outputs FAIL"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_file_exists '/no/such/file'" 2>&1)
+    assert_contains "$out" "FAIL"
 
-# ── assert_line ──────────────────────────────────────────────────────────────
+    test_that "failure shows path"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_file_exists '/no/such/file'" 2>&1)
+    assert_contains "$out" "/no/such/file"
 
-ptyunit_test_begin "assert_line: first line matches"
-_multi=$'alpha\nbeta\ngamma'
-assert_line "alpha" 1 "$_multi"
+end_describe
 
-ptyunit_test_begin "assert_line: middle line matches"
-assert_line "beta" 2 "$_multi"
+# ═════════════════════════════════════════════════════════════════════════════
+describe "assert_line"
 
-ptyunit_test_begin "assert_line: last line matches"
-assert_line "gamma" 3 "$_multi"
+    test_that "first line matches"
+    _multi=$'alpha\nbeta\ngamma'
+    assert_line "alpha" 1 "$_multi"
 
-ptyunit_test_begin "assert_line: wrong content outputs FAIL"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_line 'wrong' 1 'actual'" 2>&1)
-assert_contains "$out" "FAIL"
+    test_that "middle line matches"
+    assert_line "beta" 2 "$_multi"
 
-ptyunit_test_begin "assert_line: out of bounds outputs FAIL"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_line 'x' 5 'one'" 2>&1)
-assert_contains "$out" "FAIL"
-assert_contains "$out" "line 5"
+    test_that "last line matches"
+    assert_line "gamma" 3 "$_multi"
 
-# ── assert_gt ────────────────────────────────────────────────────────────────
+    test_that "wrong content outputs FAIL"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_line 'wrong' 1 'actual'" 2>&1)
+    assert_contains "$out" "FAIL"
 
-ptyunit_test_begin "assert_gt: 10 > 5 passes"
-assert_gt 10 5
+    test_that "out of bounds outputs FAIL"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_line 'x' 5 'one'" 2>&1)
+    assert_contains "$out" "FAIL"
+    assert_contains "$out" "line 5"
 
-ptyunit_test_begin "assert_gt: 5 > 10 fails"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_gt 5 10" 2>&1)
-assert_contains "$out" "FAIL"
+end_describe
 
-ptyunit_test_begin "assert_gt: equal values fail"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_gt 5 5" 2>&1)
-assert_contains "$out" "FAIL"
+# ═════════════════════════════════════════════════════════════════════════════
+describe "numeric comparisons"
 
-# ── assert_lt ────────────────────────────────────────────────────────────────
+    # Pass cases — parameterized
+    _check_gt() { assert_gt "$1" "$2"; }
+    _check_lt() { assert_lt "$1" "$2"; }
+    _check_ge() { assert_ge "$1" "$2"; }
+    _check_le() { assert_le "$1" "$2"; }
 
-ptyunit_test_begin "assert_lt: 3 < 7 passes"
-assert_lt 3 7
+    test_each _check_gt << 'PARAMS'
+10|5
+1|0
+100|99
+PARAMS
 
-ptyunit_test_begin "assert_lt: 7 < 3 fails"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_lt 7 3" 2>&1)
-assert_contains "$out" "FAIL"
+    test_each _check_lt << 'PARAMS'
+3|7
+0|1
+-1|0
+PARAMS
 
-# ── assert_ge ────────────────────────────────────────────────────────────────
+    test_each _check_ge << 'PARAMS'
+10|5
+5|5
+0|0
+PARAMS
 
-ptyunit_test_begin "assert_ge: 10 >= 5 passes"
-assert_ge 10 5
+    test_each _check_le << 'PARAMS'
+3|7
+5|5
+0|0
+PARAMS
 
-ptyunit_test_begin "assert_ge: 5 >= 5 passes (equal)"
-assert_ge 5 5
+    # Fail cases — verified in subshells
+    test_that "assert_gt: 5 > 10 fails"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_gt 5 10" 2>&1)
+    assert_contains "$out" "FAIL"
 
-ptyunit_test_begin "assert_ge: 3 >= 7 fails"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_ge 3 7" 2>&1)
-assert_contains "$out" "FAIL"
+    test_that "assert_gt: equal values fail"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_gt 5 5" 2>&1)
+    assert_contains "$out" "FAIL"
 
-# ── assert_le ────────────────────────────────────────────────────────────────
+    test_that "assert_lt: 7 < 3 fails"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_lt 7 3" 2>&1)
+    assert_contains "$out" "FAIL"
 
-ptyunit_test_begin "assert_le: 3 <= 7 passes"
-assert_le 3 7
+    test_that "assert_ge: 3 >= 7 fails"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_ge 3 7" 2>&1)
+    assert_contains "$out" "FAIL"
 
-ptyunit_test_begin "assert_le: 5 <= 5 passes (equal)"
-assert_le 5 5
+    test_that "assert_le: 10 <= 3 fails"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_le 10 3" 2>&1)
+    assert_contains "$out" "FAIL"
 
-ptyunit_test_begin "assert_le: 10 <= 3 fails"
-out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_le 10 3" 2>&1)
-assert_contains "$out" "FAIL"
+end_describe
 
 ptyunit_test_summary

@@ -47,11 +47,46 @@ _mode="--all"
 _jobs=$(nproc 2>/dev/null || echo 4)
 _verbose=0
 _filter=""
+_name_filter=""
 _fail_fast=0
 _format="pretty"
 
+_usage() {
+    cat << 'USAGE'
+Usage: bash run.sh [options]
+
+Suites:
+  --unit              Unit tests only (tests/unit/test-*.sh)
+  --integration       Integration tests only (tests/integration/test-*.sh)
+  --all               Both (default)
+
+Filtering:
+  --filter PATTERN    Only run files whose name contains PATTERN
+  --name PATTERN      Only run test sections whose name contains PATTERN
+
+Execution:
+  --jobs N            Max parallel test files (default: number of CPU cores)
+  --fail-fast         Stop after the first failure
+  --debug             Same as --jobs 1 --verbose
+
+Output:
+  --format pretty     Human-readable (default)
+  --format tap        TAP version 13
+  --format junit      JUnit XML
+  -v, --verbose       Show timing for every file
+
+  NO_COLOR=1          Suppress color
+  FORCE_COLOR=1       Force color in CI
+
+  -h, --help          Show this help
+USAGE
+    exit 0
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help)
+            _usage ;;
         --unit|--integration|--all)
             _mode="$1"; shift ;;
         --debug)
@@ -74,6 +109,14 @@ while [[ $# -gt 0 ]]; do
             shift 2 ;;
         --filter=*)
             _filter="${1#--filter=}"; shift ;;
+        --name)
+            _name_filter="${2:-}"
+            if [[ -z "$_name_filter" ]]; then
+                printf 'Error: --name requires a pattern\n' >&2; exit 2
+            fi
+            shift 2 ;;
+        --name=*)
+            _name_filter="${1#--name=}"; shift ;;
         --fail-fast)
             _fail_fast=1; shift ;;
         --format)
@@ -494,6 +537,11 @@ if [[ "$_format" == "pretty" ]]; then
     else
         printf 'ptyunit test runner (%d workers)\n' "$_jobs"
     fi
+fi
+
+# Export name filter for test files (checked by ptyunit_test_begin)
+if [[ -n "$_name_filter" ]]; then
+    export PTYUNIT_FILTER_NAME="$_name_filter"
 fi
 
 _fail_fast_triggered=0
