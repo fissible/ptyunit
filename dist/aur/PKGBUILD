@@ -1,0 +1,33 @@
+# Maintainer: fissible <https://github.com/fissible>
+pkgname=ptyunit
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Test framework for bash scripts and terminal UI applications"
+arch=('any')
+url="https://github.com/fissible/ptyunit"
+license=('MIT')
+depends=('bash')
+optdepends=('python: PTY driver and code coverage reports')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/fissible/ptyunit/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('12ccb665e59feefdbf6903b6a6603f1aa4f656a5eb50fd83fcc1145a32e5d9be')
+
+package() {
+    cd "$pkgname-$pkgver"
+
+    # Core library files
+    install -Dm644 assert.sh "$pkgdir/usr/lib/ptyunit/assert.sh"
+    install -Dm644 mock.sh "$pkgdir/usr/lib/ptyunit/mock.sh"
+    install -Dm755 run.sh "$pkgdir/usr/lib/ptyunit/run.sh"
+    install -Dm755 pty_run.py "$pkgdir/usr/lib/ptyunit/pty_run.py"
+    install -Dm755 coverage.sh "$pkgdir/usr/lib/ptyunit/coverage.sh"
+    install -Dm644 coverage_report.py "$pkgdir/usr/lib/ptyunit/coverage_report.py"
+
+    # License
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+    # Wrapper script
+    install -d "$pkgdir/usr/bin"
+    printf '#!/bin/bash\nexec bash /usr/lib/ptyunit/run.sh "$@"\n' \
+        > "$pkgdir/usr/bin/ptyunit"
+    chmod 755 "$pkgdir/usr/bin/ptyunit"
+}

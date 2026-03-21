@@ -1,0 +1,13 @@
+pkgbase = ptyunit
+	pkgdesc = Test framework for bash scripts and terminal UI applications
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/fissible/ptyunit
+	arch = any
+	license = MIT
+	depends = bash
+	optdepends = python: PTY driver and code coverage reports
+	source = ptyunit-1.0.0.tar.gz::https://github.com/fissible/ptyunit/archive/refs/tags/v1.0.0.tar.gz
+	sha256sums = 12ccb665e59feefdbf6903b6a6603f1aa4f656a5eb50fd83fcc1145a32e5d9be
+
+pkgname = ptyunit
