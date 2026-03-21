@@ -37,8 +37,16 @@ _PTYUNIT_MOCK_DIR=""
 
 _ptyunit_mock_init() {
     if [[ -z "$_PTYUNIT_MOCK_DIR" ]]; then
-        _PTYUNIT_MOCK_DIR=$(mktemp -d "${TMPDIR%/}/ptyunit-mock.XXXXXX")
-        mkdir -p "$_PTYUNIT_MOCK_DIR/bin" "$_PTYUNIT_MOCK_DIR/state"
+        _PTYUNIT_MOCK_DIR=$(mktemp -d "${TMPDIR%/}/ptyunit-mock.XXXXXX") || {
+            printf 'ptyunit: mktemp failed for mock directory\n' >&2
+            return 1
+        }
+        mkdir -p "$_PTYUNIT_MOCK_DIR/bin" "$_PTYUNIT_MOCK_DIR/state" || {
+            printf 'ptyunit: failed to create mock directories\n' >&2
+            rm -rf "$_PTYUNIT_MOCK_DIR"
+            _PTYUNIT_MOCK_DIR=""
+            return 1
+        }
         printf '%s' "$PATH" > "$_PTYUNIT_MOCK_DIR/original_path"
         PATH="$_PTYUNIT_MOCK_DIR/bin:$PATH"
         export PATH
@@ -79,7 +87,7 @@ ptyunit_mock() {
 
     # Determine mock type
     local mock_type="command"
-    if type -t "$name" 2>/dev/null | grep -q "function"; then
+    if declare -f "$name" > /dev/null 2>&1; then
         mock_type="function"
     fi
     printf '%s' "$mock_type" > "$state_dir/$name.type"
@@ -193,11 +201,15 @@ _ptyunit_mock_cleanup_all() {
 
     # Restore original PATH
     if [[ -f "$_PTYUNIT_MOCK_DIR/original_path" ]]; then
-        PATH=$(cat "$_PTYUNIT_MOCK_DIR/original_path")
-        export PATH
+        local _saved_path
+        _saved_path=$(<"$_PTYUNIT_MOCK_DIR/original_path")
+        if [[ -n "$_saved_path" ]]; then
+            PATH="$_saved_path"
+            export PATH
+        fi
     fi
 
-    rm -rf "$_PTYUNIT_MOCK_DIR"
+    [[ -n "$_PTYUNIT_MOCK_DIR" ]] && rm -rf "$_PTYUNIT_MOCK_DIR"
     _PTYUNIT_MOCK_DIR=""
 }
 

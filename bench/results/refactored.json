@@ -1,0 +1,11 @@
+{
+  "label": "refactored",
+  "timestamp": "2026-03-21T18:19:20Z",
+  "bash_version": "3.2.57(1)-release",
+  "git_sha": "49d0053",
+  "suites": [
+    {"name":"ptyunit-self","pass":248,"total":248,"files":14,"ms":5428,"kb":2800,"rc":0},
+    {"name":"shellframe","pass":714,"total":714,"files":19,"ms":2481,"kb":2960,"rc":0},
+    {"name":"macbin","pass":0,"total":0,"files":0,"ms":22266,"kb":5824,"rc":1}
+  ]
+}
