@@ -189,6 +189,16 @@ _ptyunit_now() {
     fi
 }
 
+# ── XML escaping helper for JUnit output ─────────────────────────────────────
+_xml_escape() {
+    local s="$1"
+    s="${s//&/&amp;}"
+    s="${s//</&lt;}"
+    s="${s//>/&gt;}"
+    s="${s//\"/&quot;}"
+    printf '%s' "$s"
+}
+
 # ── Worker: run one test file, write results to work_dir ─────────────────────
 # Called inside a background subshell. Writes:
 #   work_dir/<name>.out  — formatted output line(s) for this file
@@ -202,7 +212,7 @@ _run_job() {
     local raw_f="$work_dir/$name.raw"
 
     local _test_tmpdir
-    _test_tmpdir=$(mktemp -d)
+    _test_tmpdir=$(mktemp -d) || { printf 'Error: mktemp failed\n' >&2; return 1; }
     export PTYUNIT_TEST_TMPDIR="$_test_tmpdir"
 
     # setUp
@@ -227,7 +237,24 @@ _run_job() {
     local rc=$?
     _t1=$(_ptyunit_now)
     local _raw_elapsed
-    _raw_elapsed=$(awk "BEGIN{printf \"%.1f\", $_t1 - $_t0}")
+    if [[ "${BASH_VERSINFO[0]}" -ge 5 ]]; then
+        # EPOCHREALTIME gives microsecond precision as a string "SECONDS.MICROSECONDS"
+        # Compute difference using integer arithmetic on the whole and fractional parts
+        local _s0="${_t0%.*}" _f0="${_t0#*.}" _s1="${_t1%.*}" _f1="${_t1#*.}"
+        # Pad fractional parts to 6 digits
+        _f0="${_f0}000000"; _f0="${_f0:0:6}"
+        _f1="${_f1}000000"; _f1="${_f1:0:6}"
+        local _us=$(( (_s1 * 1000000 + 10#$_f1) - (_s0 * 1000000 + 10#$_f0) ))
+        if (( _us < 0 )); then _us=0; fi
+        local _secs=$(( _us / 1000000 ))
+        local _tenths=$(( (_us / 100000) % 10 ))
+        _raw_elapsed="${_secs}.${_tenths}"
+    else
+        # date +%s gives integer seconds
+        _raw_elapsed=$(( _t1 - _t0 ))
+        # Append .0 for consistent format
+        _raw_elapsed="${_raw_elapsed}.0"
+    fi
     if [[ "$_raw_elapsed" == "0.0" ]]; then
         _elapsed="< 0.1"
     else
@@ -256,7 +283,8 @@ _run_job() {
 
     # Show timing if verbose OR the file took >= 1 second
     local _timing_str=""
-    if (( _verbose )) || awk "BEGIN{exit ($_raw_elapsed >= 1.0) ? 0 : 1}" 2>/dev/null; then
+    local _int_elapsed="${_raw_elapsed%.*}"
+    if (( _verbose )) || (( _int_elapsed >= 1 )); then
         _timing_str=" in $_elapsed secs"
         if (( _verbose )) && [[ "$_elapsed" != "< 0.1" ]]; then
             _timing_str+=$(awk "BEGIN{printf \" (%.2f tests/second)\", $total / $_raw_elapsed}")
@@ -330,7 +358,7 @@ _run_suite() {
     [[ "$_format" == "pretty" ]] && printf '\n%s tests:\n' "$label"
 
     local work_dir
-    work_dir=$(mktemp -d)
+    work_dir=$(mktemp -d) || { printf 'Error: mktemp failed\n' >&2; return 1; }
 
     # Save file list for TAP/JUnit emission
     for f in "${files[@]}"; do
@@ -488,10 +516,8 @@ _emit_junit() {
         # Second pass: emit testcases
         while IFS= read -r _f; do
             local name="${_f##*/}"
-            local esc_name="${name//&/&amp;}"
-            esc_name="${esc_name//</&lt;}"
-            esc_name="${esc_name//>/&gt;}"
-            esc_name="${esc_name//\"/&quot;}"
+            local esc_name
+            esc_name="$(_xml_escape "$name")"
 
             if [[ ! -f "$wd/$name.res" ]]; then
                 printf '    <testcase name="%s" classname="%s" time="0">\n' "$esc_name" "$classname"
@@ -513,10 +539,7 @@ _emit_junit() {
                 if [[ -f "$wd/$name.raw" ]]; then
                     local raw
                     raw=$(<"$wd/$name.raw")
-                    raw="${raw//&/&amp;}"
-                    raw="${raw//</&lt;}"
-                    raw="${raw//>/&gt;}"
-                    printf '%s' "$raw"
+                    printf '%s' "$(_xml_escape "$raw")"
                 fi
                 printf '</failure>\n    </testcase>\n'
             else

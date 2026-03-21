@@ -39,6 +39,18 @@ output=""
 status=0
 lines=()
 
+# ── Internal fail reporter (shared by all assertions) ────────────────────────
+
+_ptyunit_report_fail() {
+    local msg="${1:-}" details="${2:-}"
+    (( _PTYUNIT_TEST_FAIL++ )) || true
+    printf 'FAIL'
+    [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
+    [[ -n "$msg" ]] && printf ' — %s' "$msg"
+    [[ -n "$details" ]] && printf '\n%s' "$details"
+    printf '\n'
+}
+
 # ── Section teardown helper (shared by test_begin, end_describe, summary) ───
 
 _ptyunit_teardown_section() {
@@ -219,11 +231,7 @@ assert_eq() {
     if [[ "$expected" == "$actual" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected: %q\n  actual:   %q\n' "$expected" "$actual"
+        _ptyunit_report_fail "$msg" "$(printf '  expected: %q\n  actual:   %q' "$expected" "$actual")"
     fi
 }
 
@@ -234,11 +242,7 @@ assert_not_eq() {
     if [[ "$expected" != "$actual" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected not equal to: %q\n' "$expected"
+        _ptyunit_report_fail "$msg" "$(printf '  expected not equal to: %q' "$expected")"
     fi
 }
 
@@ -260,11 +264,7 @@ assert_contains() {
     if [[ "$haystack" == *"$needle"* ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected to contain: %q\n  actual: %q\n' "$needle" "$haystack"
+        _ptyunit_report_fail "$msg" "$(printf '  expected to contain: %q\n  actual: %q' "$needle" "$haystack")"
     fi
 }
 
@@ -275,11 +275,7 @@ assert_not_contains() {
     if [[ "$haystack" != *"$needle"* ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected NOT to contain: %q\n  actual: %q\n' "$needle" "$haystack"
+        _ptyunit_report_fail "$msg" "$(printf '  expected NOT to contain: %q\n  actual: %q' "$needle" "$haystack")"
     fi
 }
 
@@ -291,10 +287,7 @@ assert_true() {
     if "$@" 2>/dev/null; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        printf ' — expected true: %s\n' "$msg"
+        _ptyunit_report_fail "expected true: $msg"
     fi
 }
 
@@ -306,10 +299,7 @@ assert_false() {
     if ! "$@" 2>/dev/null; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        printf ' — expected false: %s\n' "$msg"
+        _ptyunit_report_fail "expected false: $msg"
     fi
 }
 
@@ -320,11 +310,7 @@ assert_null() {
     if [[ -z "$value" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected empty, got: %q\n' "$value"
+        _ptyunit_report_fail "$msg" "$(printf '  expected empty, got: %q' "$value")"
     fi
 }
 
@@ -335,11 +321,7 @@ assert_not_null() {
     if [[ -n "$value" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected non-empty string\n'
+        _ptyunit_report_fail "$msg" "  expected non-empty string"
     fi
 }
 
@@ -351,11 +333,7 @@ assert_match() {
     if [[ "$string" =~ $pattern ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected match: %s\n  actual:         %q\n' "$pattern" "$string"
+        _ptyunit_report_fail "$msg" "$(printf '  expected match: %s\n  actual:         %q' "$pattern" "$string")"
     fi
 }
 
@@ -367,11 +345,7 @@ assert_file_exists() {
     if [[ -f "$path" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  file does not exist: %s\n' "$path"
+        _ptyunit_report_fail "$msg" "$(printf '  file does not exist: %s' "$path")"
     fi
 }
 
@@ -380,6 +354,11 @@ assert_file_exists() {
 assert_line() {
     (( _PTYUNIT_SKIP_CURRENT )) && return
     local expected="$1" line_number="$2" output="$3" msg="${4:-}"
+    # Validate line_number is a positive integer
+    if ! [[ "$line_number" =~ ^[1-9][0-9]*$ ]]; then
+        _ptyunit_report_fail "$msg" "$(printf '  line_number must be a positive integer, got: %s' "$line_number")"
+        return
+    fi
     local actual="" _ptyunit_i=0
     while IFS= read -r _ptyunit_line || [[ -n "$_ptyunit_line" ]]; do
         (( _ptyunit_i++ )) || true
@@ -389,11 +368,7 @@ assert_line() {
         fi
     done <<< "$output"
     if (( _ptyunit_i < line_number )); then
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  output has %d lines, requested line %d\n' "$_ptyunit_i" "$line_number"
+        _ptyunit_report_fail "$msg" "$(printf '  output has %d lines, requested line %d' "$_ptyunit_i" "$line_number")"
         return
     fi
     assert_eq "$expected" "$actual" "$msg"
@@ -407,11 +382,7 @@ assert_gt() {
     if (( actual > threshold )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected: %s > %s\n' "$actual" "$threshold"
+        _ptyunit_report_fail "$msg" "$(printf '  expected: %s > %s' "$actual" "$threshold")"
     fi
 }
 
@@ -423,11 +394,7 @@ assert_lt() {
     if (( actual < threshold )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected: %s < %s\n' "$actual" "$threshold"
+        _ptyunit_report_fail "$msg" "$(printf '  expected: %s < %s' "$actual" "$threshold")"
     fi
 }
 
@@ -439,11 +406,7 @@ assert_ge() {
     if (( actual >= threshold )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected: %s >= %s\n' "$actual" "$threshold"
+        _ptyunit_report_fail "$msg" "$(printf '  expected: %s >= %s' "$actual" "$threshold")"
     fi
 }
 
@@ -455,11 +418,7 @@ assert_le() {
     if (( actual <= threshold )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
-        (( _PTYUNIT_TEST_FAIL++ )) || true
-        printf 'FAIL'
-        [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        [[ -n "$msg" ]] && printf ' — %s' "$msg"
-        printf '\n  expected: %s <= %s\n' "$actual" "$threshold"
+        _ptyunit_report_fail "$msg" "$(printf '  expected: %s <= %s' "$actual" "$threshold")"
     fi
 }
 

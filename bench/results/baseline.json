@@ -1,0 +1,11 @@
+{
+  "label": "baseline",
+  "timestamp": "2026-03-21T18:01:57Z",
+  "bash_version": "3.2.57(1)-release",
+  "git_sha": "c91a62f",
+  "suites": [
+    {"name":"ptyunit-self","pass":248,"total":248,"files":14,"ms":6169,"kb":2848,"rc":0},
+    {"name":"shellframe","pass":714,"total":714,"files":19,"ms":3096,"kb":2944,"rc":0},
+    {"name":"macbin","pass":0,"total":0,"files":0,"ms":22749,"kb":5792,"rc":1}
+  ]
+}
