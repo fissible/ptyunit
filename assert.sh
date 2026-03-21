@@ -374,6 +374,23 @@ assert_line() {
     assert_eq "$expected" "$actual" "$msg"
 }
 
+# Assert that a substring appears exactly N times in a string.
+# Usage: assert_count "haystack" "needle" expected_count [msg]
+assert_count() {
+    (( _PTYUNIT_SKIP_CURRENT )) && return
+    local haystack="$1" needle="$2" expected="$3" msg="${4:-}"
+    local count=0 tmp="$haystack"
+    while [[ "$tmp" == *"$needle"* ]]; do
+        (( count++ ))
+        tmp="${tmp#*"$needle"}"
+    done
+    if (( count == expected )); then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        _ptyunit_report_fail "$msg" "$(printf '  expected %d occurrence(s) of: %q\n  actual count: %d' "$expected" "$needle" "$count")"
+    fi
+}
+
 # Assert actual > threshold (integer comparison).
 # Usage: assert_gt actual threshold [msg]
 assert_gt() {

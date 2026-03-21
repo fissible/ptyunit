@@ -21,6 +21,7 @@ Options (set via env vars):
     PTY_DELAY=0.15  seconds between keys (default: 0.15)
     PTY_INIT=0.30   seconds to wait before first key (default: 0.30)
     PTY_TIMEOUT=10  seconds to wait for process exit (default: 10)
+    PTY_RAW=0       set to 1 to preserve ANSI escapes in output (default: 0)
 
 Exit code: the script's own exit code (or 124 on timeout).
 """
@@ -98,6 +99,7 @@ def run(
     timeout: float = 10.0,
     cols: int = 80,
     rows: int = 24,
+    raw: bool = False,
 ) -> tuple:
     """Run *script* in a PTY with proper controlling terminal.
 
@@ -186,10 +188,13 @@ def run(
     except OSError:
         pass
 
-    stripped = ANSI_RE.sub(b"", output)
-    stripped = stripped.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    if raw:
+        result = output.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    else:
+        result = ANSI_RE.sub(b"", output)
+        result = result.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
 
-    return stripped.decode("utf-8", errors="replace"), exit_code
+    return result.decode("utf-8", errors="replace"), exit_code
 
 
 def main():
@@ -205,9 +210,10 @@ def main():
     delay  = float(os.environ.get("PTY_DELAY", 0.15))
     init   = float(os.environ.get("PTY_INIT",  0.30))
     tmt    = float(os.environ.get("PTY_TIMEOUT", 10))
+    raw    = os.environ.get("PTY_RAW", "0") == "1"
 
     out, rc = run(script, keys, key_delay=delay, init_delay=init,
-                  timeout=tmt, cols=cols, rows=rows)
+                  timeout=tmt, cols=cols, rows=rows, raw=raw)
     sys.stdout.write(out)
     sys.exit(rc)
 
