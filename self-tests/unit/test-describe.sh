@@ -125,4 +125,94 @@ P
 " 2>&1)
 assert_contains "$out2" "math > _fail"
 
+# ── describe with setup function ─────────────────────────────────────────────
+
+ptyunit_test_begin "describe: setup function runs before each test"
+out=$(bash -c "
+    source '$PTYUNIT_DIR/assert.sh'
+    _log=''
+    _setup_db() { _log=\"\${_log}D\"; }
+    describe 'database' _setup_db
+        test_that 'test 1'
+        assert_eq 'a' 'a'
+        test_that 'test 2'
+        assert_eq 'b' 'b'
+    end_describe
+    printf 'LOG=%s' \"\$_log\"
+" 2>&1)
+assert_contains "$out" "LOG=DD"
+
+# ── describe with teardown function ──────────────────────────────────────────
+
+ptyunit_test_begin "describe: teardown runs after each test (including last)"
+out=$(bash -c "
+    source '$PTYUNIT_DIR/assert.sh'
+    _log=''
+    _td() { _log=\"\${_log}T\"; }
+    describe 'suite' '' _td
+        test_that 'one'
+        assert_eq 'a' 'a'
+        test_that 'two'
+        assert_eq 'b' 'b'
+    end_describe
+    printf 'LOG=%s' \"\$_log\"
+" 2>&1)
+assert_contains "$out" "LOG=TT"
+
+# ── nested describe accumulates setups ───────────────────────────────────────
+
+ptyunit_test_begin "describe: nested setups accumulate (outer first)"
+out=$(bash -c "
+    source '$PTYUNIT_DIR/assert.sh'
+    _log=''
+    _outer() { _log=\"\${_log}O\"; }
+    _inner() { _log=\"\${_log}I\"; }
+    describe 'outer' _outer
+        describe 'inner' _inner
+            test_that 'test'
+            assert_eq 'a' 'a'
+        end_describe
+    end_describe
+    printf 'LOG=%s' \"\$_log\"
+" 2>&1)
+assert_contains "$out" "LOG=OI"
+
+# ── nested teardowns unwind (inner first) ────────────────────────────────────
+
+ptyunit_test_begin "describe: nested teardowns unwind (inner first)"
+out=$(bash -c "
+    source '$PTYUNIT_DIR/assert.sh'
+    _log=''
+    _td_o() { _log=\"\${_log}O\"; }
+    _td_i() { _log=\"\${_log}I\"; }
+    describe 'outer' '' _td_o
+        describe 'inner' '' _td_i
+            test_that 'test'
+            assert_eq 'a' 'a'
+        end_describe
+    end_describe
+    printf 'LOG=%s' \"\$_log\"
+" 2>&1)
+assert_contains "$out" "LOG=IO"
+
+# ── describe setup stops after end_describe ──────────────────────────────────
+
+ptyunit_test_begin "describe: setup does not leak past end_describe"
+out=$(bash -c "
+    source '$PTYUNIT_DIR/assert.sh'
+    _log=''
+    _s() { _log=\"\${_log}S\"; }
+    describe 'scoped' _s
+        test_that 'inside'
+        assert_eq 'a' 'a'
+    end_describe
+    test_that 'outside'
+    assert_eq 'b' 'b'
+    ptyunit_test_summary
+    printf 'LOG=%s' \"\$_log\"
+" 2>&1)
+# Setup ran once (inside), not for the test outside
+assert_contains "$out" "LOG=S"
+assert_not_contains "$out" "LOG=SS"
+
 ptyunit_test_summary

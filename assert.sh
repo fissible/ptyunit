@@ -30,27 +30,46 @@ _PTYUNIT_SKIP_CURRENT=0
 _PTYUNIT_SAVED_PWD=""
 _PTYUNIT_SECTION_FILTERED=0
 _PTYUNIT_DESCRIBE_STACK=""
+_PTYUNIT_DESCRIBE_DEPTH=0
+_PTYUNIT_DESCRIBE_SETUPS=()
+_PTYUNIT_DESCRIBE_TEARDOWNS=()
+
+# Variables set by run() — available after calling run <command>
+output=""
+status=0
+lines=()
+
+# ── Section teardown helper (shared by test_begin, end_describe, summary) ───
+
+_ptyunit_teardown_section() {
+    if declare -f ptyunit_teardown > /dev/null 2>&1; then
+        ptyunit_teardown
+    fi
+    if declare -f _ptyunit_mock_cleanup_all > /dev/null 2>&1; then
+        _ptyunit_mock_cleanup_all
+    fi
+    # Describe-level teardowns (innermost first)
+    local _di
+    for (( _di=_PTYUNIT_DESCRIBE_DEPTH-1; _di >= 0; _di-- )); do
+        local _dt="${_PTYUNIT_DESCRIBE_TEARDOWNS[$_di]:-}"
+        [[ -n "$_dt" ]] && "$_dt"
+    done
+    if [[ -n "$_PTYUNIT_SAVED_PWD" ]]; then
+        cd "$_PTYUNIT_SAVED_PWD" 2>/dev/null || true
+    fi
+}
 
 # Begin a named test section. Manages per-test lifecycle:
-#   1. Teardown previous section (if not filtered out)
-#   2. Clean up mocks
-#   3. Restore working directory
-#   4. Set name (with describe prefix if applicable)
-#   5. Check name filter (PTYUNIT_FILTER_NAME)
-#   6. Save working directory
-#   7. Setup new section (if ptyunit_setup is defined)
+#   1. Teardown previous section (per-test, then describe-level innermost-first)
+#   2. Clean up mocks, restore PWD
+#   3. Set name (with describe prefix if applicable)
+#   4. Check name filter (PTYUNIT_FILTER_NAME)
+#   5. Save PWD
+#   6. Run describe-level setups (outermost first)
+#   7. Run per-test setup (if ptyunit_setup is defined)
 ptyunit_test_begin() {
-    # Lifecycle for previous section (skip if it was filtered out)
     if [[ -n "$_PTYUNIT_TEST_NAME" ]] && (( ! _PTYUNIT_SECTION_FILTERED )); then
-        if declare -f ptyunit_teardown > /dev/null 2>&1; then
-            ptyunit_teardown
-        fi
-        if declare -f _ptyunit_mock_cleanup_all > /dev/null 2>&1; then
-            _ptyunit_mock_cleanup_all
-        fi
-        if [[ -n "$_PTYUNIT_SAVED_PWD" ]]; then
-            cd "$_PTYUNIT_SAVED_PWD" 2>/dev/null || true
-        fi
+        _ptyunit_teardown_section
     fi
 
     # Build the full test name (with describe prefix)
@@ -70,6 +89,13 @@ ptyunit_test_begin() {
     fi
 
     _PTYUNIT_SAVED_PWD="$PWD"
+    # Describe-level setups (outermost first)
+    local _di
+    for (( _di=0; _di < _PTYUNIT_DESCRIBE_DEPTH; _di++ )); do
+        local _ds="${_PTYUNIT_DESCRIBE_SETUPS[$_di]:-}"
+        [[ -n "$_ds" ]] && "$_ds"
+    done
+    # Per-test setup
     if declare -f ptyunit_setup > /dev/null 2>&1; then
         ptyunit_setup
     fi
@@ -79,19 +105,44 @@ test_that() { ptyunit_test_begin "$@"; }
 test_it()   { ptyunit_test_begin "$@"; }
 test_they() { ptyunit_test_begin "$@"; }
 
-# ── Describe blocks (nestable naming) ───────────────────────────────────────
-# Group tests under a label. Nests arbitrarily. Test names become:
-#   [outer > inner > test name]
+# ── Describe blocks (nestable scope) ─────────────────────────────────────────
+# Group tests under a label with optional per-describe setup/teardown.
+# Nests arbitrarily. Setup functions accumulate (outer runs first).
+# Teardown functions unwind (inner runs first).
+#
+# Usage:
+#   describe "name" [setup_fn] [teardown_fn]
+#     test_that "..."
+#   end_describe
 
 describe() {
+    local name="$1"
+    local setup_fn="${2:-}"
+    local teardown_fn="${3:-}"
+
     if [[ -n "$_PTYUNIT_DESCRIBE_STACK" ]]; then
-        _PTYUNIT_DESCRIBE_STACK+=" > $1"
+        _PTYUNIT_DESCRIBE_STACK+=" > $name"
     else
-        _PTYUNIT_DESCRIBE_STACK="$1"
+        _PTYUNIT_DESCRIBE_STACK="$name"
     fi
+    _PTYUNIT_DESCRIBE_SETUPS[$_PTYUNIT_DESCRIBE_DEPTH]="$setup_fn"
+    _PTYUNIT_DESCRIBE_TEARDOWNS[$_PTYUNIT_DESCRIBE_DEPTH]="$teardown_fn"
+    (( _PTYUNIT_DESCRIBE_DEPTH++ )) || true
 }
 
 end_describe() {
+    # Teardown the active test section before popping (ensures describe-level
+    # teardowns run while the depth is still correct)
+    if [[ -n "$_PTYUNIT_TEST_NAME" ]] && (( ! _PTYUNIT_SECTION_FILTERED )); then
+        _ptyunit_teardown_section
+        _PTYUNIT_TEST_NAME=""
+    fi
+
+    if (( _PTYUNIT_DESCRIBE_DEPTH > 0 )); then
+        (( _PTYUNIT_DESCRIBE_DEPTH-- )) || true
+        _PTYUNIT_DESCRIBE_SETUPS[$_PTYUNIT_DESCRIBE_DEPTH]=""
+        _PTYUNIT_DESCRIBE_TEARDOWNS[$_PTYUNIT_DESCRIBE_DEPTH]=""
+    fi
     if [[ "$_PTYUNIT_DESCRIBE_STACK" == *" > "* ]]; then
         _PTYUNIT_DESCRIBE_STACK="${_PTYUNIT_DESCRIBE_STACK% > *}"
     else
@@ -412,19 +463,61 @@ assert_le() {
     fi
 }
 
+# ── run helper ───────────────────────────────────────────────────────────────
+# Capture a command's stdout+stderr and exit code in one call.
+# Sets: $output (string), $status (integer), $lines (array).
+#
+# Usage:
+#   run my_command arg1 arg2
+#   assert_eq "0" "$status"
+#   assert_contains "$output" "success"
+#   assert_eq "first line" "${lines[0]}"
+
+run() {
+    local _rc=0
+    output=$("$@" 2>&1) || _rc=$?
+    status=$_rc
+    lines=()
+    if [[ -n "$output" ]]; then
+        while IFS= read -r _ptyunit_run_line; do
+            lines+=("$_ptyunit_run_line")
+        done <<< "$output"
+    fi
+}
+
+# ── Custom matcher primitives ────────────────────────────────────────────────
+# Building blocks for user-defined assertions. Use these to write your own
+# assert_* functions that integrate with ptyunit's pass/fail counters.
+#
+# Usage:
+#   assert_valid_json() {
+#       local value="$1"
+#       if echo "$value" | python3 -m json.tool > /dev/null 2>&1; then
+#           ptyunit_pass
+#       else
+#           ptyunit_fail "expected valid JSON, got: $value"
+#       fi
+#   }
+
+ptyunit_pass() {
+    (( _PTYUNIT_SKIP_CURRENT )) && return
+    (( _PTYUNIT_TEST_PASS++ )) || true
+}
+
+ptyunit_fail() {
+    (( _PTYUNIT_SKIP_CURRENT )) && return
+    local msg="${1:-assertion failed}"
+    (( _PTYUNIT_TEST_FAIL++ )) || true
+    printf 'FAIL'
+    [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
+    printf ' — %s\n' "$msg"
+}
+
 # Print a summary line and exit 1 if any tests failed.
 ptyunit_test_summary() {
     # Teardown the final test section (skip if it was filtered out)
     if [[ -n "$_PTYUNIT_TEST_NAME" ]] && (( ! _PTYUNIT_SECTION_FILTERED )); then
-        if declare -f ptyunit_teardown > /dev/null 2>&1; then
-            ptyunit_teardown
-        fi
-        if declare -f _ptyunit_mock_cleanup_all > /dev/null 2>&1; then
-            _ptyunit_mock_cleanup_all
-        fi
-        if [[ -n "$_PTYUNIT_SAVED_PWD" ]]; then
-            cd "$_PTYUNIT_SAVED_PWD" 2>/dev/null || true
-        fi
+        _ptyunit_teardown_section
     fi
     local total=$(( _PTYUNIT_TEST_PASS + _PTYUNIT_TEST_FAIL ))
     local skip_msg=""
