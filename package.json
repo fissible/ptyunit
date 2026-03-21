@@ -1,0 +1,10 @@
+{
+  "name": "ptyunit",
+  "version": "1.0.0",
+  "description": "Test framework for bash scripts and terminal UI applications",
+  "scripts": ["assert.sh", "mock.sh", "run.sh", "pty_run.py", "coverage.sh", "coverage_report.py"],
+  "install": "mkdir -p ${PREFIX:-/usr/local}/lib/ptyunit && cp assert.sh mock.sh run.sh pty_run.py coverage.sh coverage_report.py ${PREFIX:-/usr/local}/lib/ptyunit/",
+  "repo": "fissible/ptyunit",
+  "keywords": ["test", "testing", "bash", "pty", "tui", "mock", "assert"],
+  "license": "MIT"
+}

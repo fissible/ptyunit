@@ -51,8 +51,12 @@ _name_filter=""
 _fail_fast=0
 _format="pretty"
 
+PTYUNIT_VERSION="1.0.0"
+
 _usage() {
-    cat << 'USAGE'
+    cat << USAGE
+ptyunit $PTYUNIT_VERSION — bash test runner
+
 Usage: bash run.sh [options]
 
 Suites:
@@ -79,6 +83,7 @@ Output:
   FORCE_COLOR=1       Force color in CI
 
   -h, --help          Show this help
+  --version           Show version
 USAGE
     exit 0
 }
@@ -87,6 +92,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
             _usage ;;
+        --version)
+            printf 'ptyunit %s\n' "$PTYUNIT_VERSION"; exit 0 ;;
         --unit|--integration|--all)
             _mode="$1"; shift ;;
         --debug)
