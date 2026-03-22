@@ -9,6 +9,8 @@ Usage:
 """
 
 import argparse
+import datetime
+import glob
 import json
 import os
 import re
@@ -239,6 +241,65 @@ def format_html(results: list[dict], src_dir: str) -> str:
     return '\n'.join(html)
 
 
+def _parse_report_dt(filename: str):
+    """Parse YYYY_MM_DD_HH_MM_SS from a report filename, return datetime or None."""
+    stem = filename[:-5] if filename.endswith('.html') else filename
+    try:
+        return datetime.datetime.strptime(stem, '%Y_%m_%d_%H_%M_%S')
+    except ValueError:
+        return None
+
+
+def _format_display_date(dt: datetime.datetime) -> str:
+    """Format as 'Month D, YYYY, H:MM am/pm'."""
+    hour = str(int(dt.strftime('%I')))
+    minute = dt.strftime('%M')
+    ampm = dt.strftime('%p').lower()
+    return f'{dt.strftime("%B")} {dt.day}, {dt.year}, {hour}:{minute} {ampm}'
+
+
+def regenerate_index(coverage_dir: str) -> None:
+    """Rewrite coverage/index.html as a horizontal nav + iframe."""
+    pattern = os.path.join(coverage_dir, '????_??_??_??_??_??.html')
+    entries = []
+    for filepath in sorted(glob.glob(pattern)):
+        name = os.path.basename(filepath)
+        dt = _parse_report_dt(name)
+        if dt is not None:
+            entries.append((name, _format_display_date(dt)))
+
+    if not entries:
+        return
+
+    latest = entries[-1][0]
+    links = '\n  '.join(
+        f'<a href="{name}" target="report">{label}</a>'
+        for name, label in entries
+    )
+
+    html = f'''<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>ptyunit coverage</title>
+<style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: monospace; background: #1a1a1a; color: #e0e0e0; display: flex; flex-direction: column; height: 100vh; }}
+nav {{ background: #2a2a2a; border-bottom: 1px solid #444; padding: 8px 12px; overflow-x: auto; white-space: nowrap; flex-shrink: 0; }}
+nav a {{ display: inline-block; color: #7af; text-decoration: none; padding: 4px 10px; margin-right: 4px; border-radius: 3px; border: 1px solid #444; }}
+nav a:hover {{ background: #3a3a3a; }}
+iframe {{ flex: 1; border: none; width: 100%; }}
+</style>
+</head><body>
+<nav>
+  {links}
+</nav>
+<iframe name="report" src="{latest}"></iframe>
+</body></html>'''
+
+    with open(os.path.join(coverage_dir, 'index.html'), 'w') as f:
+        f.write(html)
+
+
 def main():
     parser = argparse.ArgumentParser(description='ptyunit coverage report')
     parser.add_argument('--trace', required=True, help='Path to xtrace output file')
@@ -256,10 +317,14 @@ def main():
         print(format_json(results))
     elif args.format == 'html':
         os.makedirs('coverage', exist_ok=True)
+        timestamp = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
+        report_name = f'{timestamp}.html'
+        report_path = os.path.join('coverage', report_name)
         html = format_html(results, args.src)
-        with open('coverage/index.html', 'w') as f:
+        with open(report_path, 'w') as f:
             f.write(html)
-        print(f'HTML coverage report written to coverage/index.html')
+        print(f'HTML coverage report written to {report_path}')
+        regenerate_index('coverage')
         # Also print text summary
         print(format_text(results))
 
