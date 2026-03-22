@@ -11,7 +11,7 @@ test_that "math still works"
 assert_eq "4" "$(( 2 + 2 ))"
 
 greet() {
-  echo "Hello, " "$1"
+  echo "Hello, $1"
 }
 test_that "my function greets people"
 assert_output "Hello, world" greet "world"
@@ -83,6 +83,11 @@ assert_contains "$out" "You selected: cherry"
 Replace any command with a fake. Record calls. Verify what happened. Mocks clean up automatically when the next test starts.
 
 ```bash
+deploy_to_staging() {
+    git push origin staging || { echo "deploy failed"; return 1; }
+    curl -s https://hooks.example.com/deployed
+}
+
 test_that "deploy pushes to staging"
 ptyunit_mock git --output "pushed"
 ptyunit_mock curl --exit 0
@@ -133,6 +138,9 @@ Each row becomes its own test section. Fields are split on `|` and passed as `$1
 ### Group tests with describe blocks
 
 ```bash
+str_upper() { echo "$1" | tr '[:lower:]' '[:upper:]'; }
+str_trim()  { echo "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'; }
+
 describe "string utils"
     describe "upper"
         test_that "converts lowercase"
@@ -168,6 +176,12 @@ Define `ptyunit_setup` and `ptyunit_teardown` in your test file. They run automa
 
 ```bash
 source tests/ptyunit/assert.sh
+
+my_init() {
+    mkdir -p "$1"
+    touch "$1/config.ini"
+    touch "$1/app.log"
+}
 
 _tmpdir=""
 ptyunit_setup()    { _tmpdir=$(mktemp -d); }
@@ -213,6 +227,8 @@ assert_true check_cgroups   # silently skipped
 Instead of manually juggling `$()` and `$?`:
 
 ```bash
+deploy_to_staging() { echo "deployed to staging"; }
+
 test_that "deploy succeeds"
 run deploy_to_staging
 assert_eq "0" "$status"
@@ -236,6 +252,8 @@ assert_valid_json() {
         ptyunit_fail "expected valid JSON, got: $1"
     fi
 }
+
+my_api_call() { echo '{"status": "ok"}'; }
 
 test_that "API returns JSON"
 run my_api_call
