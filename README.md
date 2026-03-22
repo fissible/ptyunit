@@ -506,7 +506,7 @@ TOTAL                         269    181     88    67%
 | `--src=<dir>` | Which directory to measure (default: `src/` or `.`) |
 | `--report=text` | Table to stdout (default) |
 | `--report=json` | JSON to stdout |
-| `--report=html` | Browsable HTML report at `coverage/index.html` |
+| `--report=html` | Timestamped HTML report in `coverage/`; `coverage/index.html` is a scrollable nav that links all runs |
 | `--min=N` | Fail if coverage is below N% (for CI gates) |
 
 > **How it works:** Each test file runs with `set -x` and a custom `PS4` that logs `file:line` to a trace file. A Python script then cross-references the trace against your source files. Works on bash 3.2 — no special tools needed.

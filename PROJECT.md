@@ -60,7 +60,7 @@ independent layers that work together or standalone:
 | `run.sh` | ~380 | Test runner with TAP/JUnit/pretty output |
 | `pty_run.py` | ~160 | PTY driver |
 | `coverage.sh` | ~165 | Coverage orchestrator |
-| `coverage_report.py` | ~250 | Coverage report generator |
+| `coverage_report.py` | ~335 | Coverage report generator (timestamped html + index nav) |
 
 **Self-test files:**
 
@@ -184,9 +184,25 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-20 (session 6)_
+_Last updated: 2026-03-22 (session 7)_
 
-**Major feature session. All milestones through M6 complete. 231/231 tests pass.**
+**248/248 tests pass.**
+
+Completed 2026-03-22 (session 7 — coverage report history):
+
+- `coverage_report.py`: `--report=html` now writes `coverage/YYYY_MM_DD_HH_MM_SS.html` (timestamped) instead of overwriting `coverage/index.html`
+- `coverage_report.py`: added `regenerate_index()` — rewrites `coverage/index.html` as a dark-themed horizontal nav bar with an iframe viewer; links open reports in the iframe; latest report auto-loads on open; called automatically after every html report run
+- Existing `coverage/index.html` in shellframe renamed to `coverage/2026_03_22_13_48_43.html`
+
+**Next steps:**
+1. Update `fissible/shellframe` submodule pointer to pick up new ptyunit commit
+2. CI workflow (GitHub Actions) for ptyunit itself
+3. Per-test coverage capture + redundancy detection
+4. Minor ergonomics: `run` helper, negative line indices, `refute_*`
+
+---
+
+**Previous session (2026-03-20, session 6 — competitive parity + beyond):**
 
 Completed 2026-03-20 (session 6 — competitive parity + beyond):
 
