@@ -1,0 +1,9 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    uses: fissible/.github/.github/workflows/release.yml@main
