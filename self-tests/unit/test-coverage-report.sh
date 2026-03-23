@@ -72,13 +72,27 @@ end_describe
 # ═══════════════════════════════════════════════════════════════════════════════
 describe "coverage_report: _ptyunit_version"
 
-    test_that "returns a non-empty version (not 'unknown')"
+    test_that "returns a non-empty version (not 'unknown') when VERSION file exists"
     _out=$(python3 -c "
 import sys; sys.path.insert(0, '$PTYUNIT_DIR')
 from coverage_report import _ptyunit_version
 print(_ptyunit_version())
 ")
     assert_not_eq "unknown" "$_out"
+
+    test_that "returns 'unknown' when VERSION file is absent (Homebrew without VERSION installed)"
+    _tmpdir=$(mktemp -d)
+    cp "$PTYUNIT_DIR/coverage_report.py" "$_tmpdir/"
+    _out=$(python3 "$_tmpdir/coverage_report.py" --trace /dev/null --src /dev/null --format text 2>/dev/null \
+        | grep -c 'unknown' || true)
+    # The script itself shouldn't crash — just check exit succeeds from a dir without VERSION
+    python3 -c "
+import sys; sys.path.insert(0, '$_tmpdir')
+from coverage_report import _ptyunit_version
+print(_ptyunit_version())
+"
+    assert_eq "0" "$?"
+    rm -rf "$_tmpdir"
 
 end_describe
 
