@@ -186,18 +186,21 @@ ptyunit/
 
 _Last updated: 2026-03-22 (session 8)_
 
-**266/266 tests pass.**
+**266/266 tests pass. Released v1.1.0.**
 
-Completed 2026-03-22 (session 8 — coverage bug fix + HTML report improvements):
+Completed 2026-03-22 (session 8 — coverage bug fix + HTML report improvements + release):
 
 - `coverage_report.py`: fixed bug where function declaration lines (`foo() {`) always showed as missed — bash's `set -x` never traces function definitions, only statements inside functions when called. Added `_FUNC_DEF_RE` regex to `count_source_lines()` to exclude function declaration lines from the executable set.
 - `coverage_report.py`: HTML report file names in summary table now link to per-file detail sections (added `id` anchors on `<h2>` elements, `<a href="#anchor">` in table rows).
 - `coverage_report.py`: HTML report now shows ptyunit version (read from `VERSION` file via `_ptyunit_version()`).
+- Released v1.1.0 (`bash release.sh minor`) — tagged and pushed.
 
-**Submodule bump needed:** shellframe, shellql, seed all use ptyunit as a submodule — flag for each repo's worker or PM to schedule.
+**Downstream actions needed (flag for PM):**
+- Homebrew formula: bump ptyunit pin from v1.0.0 → v1.1.0
+- Submodule bump needed in: shellframe, shellql, seed (pick up v1.1.0)
 
 **Next steps:**
-1. Update `fissible/shellframe` submodule pointer to pick up new ptyunit commits (sessions 7 + 8)
+1. Update `fissible/shellframe` submodule pointer to v1.1.0 (+ update Homebrew formula)
 2. CI workflow (GitHub Actions) for ptyunit itself
 3. Per-test coverage capture + redundancy detection
 4. Minor ergonomics: `run` helper, negative line indices, `refute_*`
