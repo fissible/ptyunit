@@ -18,6 +18,25 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+# Matches bash function declaration lines — never executed by set -x, only definitions.
+# Handles: name() {   name ()   function name {   function name() {
+_FUNC_DEF_RE = re.compile(
+    r'^function\s+[a-zA-Z_]\w*(\s*\(\))?\s*\{?\s*$'
+    r'|^[a-zA-Z_]\w*\s*\(\)\s*\{?\s*$'
+)
+
+
+def _ptyunit_version() -> str:
+    try:
+        return (Path(__file__).parent / 'VERSION').read_text().strip()
+    except (IOError, OSError):
+        return 'unknown'
+
+
+def _file_anchor(relative: str) -> str:
+    """Sanitize a relative file path into a valid HTML id."""
+    return re.sub(r'[^a-zA-Z0-9]', '-', relative)
+
 
 def find_source_files(src_dir: str) -> list[str]:
     """Find all .sh files under src_dir."""
@@ -46,6 +65,8 @@ def count_source_lines(filepath: str) -> dict[int, str]:
                     continue
                 if stripped in ('{', '}', 'fi', 'do', 'done', 'then', 'else',
                                 'elif', 'esac', ';;', ')', ';;)', '*)'):
+                    continue
+                if _FUNC_DEF_RE.match(stripped):
                     continue
                 executable[i] = stripped
     except (IOError, OSError):
@@ -177,6 +198,7 @@ def format_html(results: list[dict], src_dir: str) -> str:
     total_total = sum(r['total'] for r in results)
     total_pct = (total_hit / total_total * 100) if total_total > 0 else 0
 
+    version = _ptyunit_version()
     html = ['<!DOCTYPE html><html><head>',
             '<meta charset="utf-8">',
             '<title>ptyunit coverage</title>',
@@ -195,8 +217,12 @@ def format_html(results: list[dict], src_dir: str) -> str:
             'h1 { color: #fff; }',
             'h2 { color: #aaa; margin-top: 2em; }',
             '.summary { font-size: 1.2em; margin-bottom: 1em; }',
+            '.meta { color: #888; font-size: 0.9em; margin-bottom: 1.5em; }',
+            'a { color: #7af; text-decoration: none; }',
+            'a:hover { text-decoration: underline; }',
             '</style></head><body>',
             f'<h1>ptyunit coverage</h1>',
+            f'<p class="meta">ptyunit v{version}</p>',
             f'<p class="summary">Total: {total_hit}/{total_total} lines ({total_pct:.0f}%)</p>',
             '<table><tr><th>File</th><th class="num">Lines</th><th class="num">Hit</th>',
             '<th class="num">Miss</th><th class="pct">Coverage</th><th>Bar</th></tr>']
@@ -207,7 +233,8 @@ def format_html(results: list[dict], src_dir: str) -> str:
         miss_w = bar_w - hit_w
         bar = (f'<span class="bar bar-hit" style="width:{hit_w}px"></span>'
                f'<span class="bar bar-miss" style="width:{miss_w}px"></span>')
-        html.append(f'<tr><td>{r["relative"]}</td>'
+        anchor = _file_anchor(r['relative'])
+        html.append(f'<tr><td><a href="#{anchor}">{r["relative"]}</a></td>'
                     f'<td class="num">{r["total"]}</td>'
                     f'<td class="num">{r["hit"]}</td>'
                     f'<td class="num">{r["missed"]}</td>'
@@ -220,7 +247,8 @@ def format_html(results: list[dict], src_dir: str) -> str:
     for r in results:
         missed_set = set(r['missed_lines'])
         executable = count_source_lines(r['file'])
-        html.append(f'<h2>{r["relative"]} ({r["pct"]:.0f}%)</h2>')
+        anchor = _file_anchor(r['relative'])
+        html.append(f'<h2 id="{anchor}">{r["relative"]} ({r["pct"]:.0f}%)</h2>')
         html.append('<pre>')
         try:
             with open(r['file'], 'r', errors='replace') as f:
