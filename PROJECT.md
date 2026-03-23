@@ -184,18 +184,20 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-22 (session 7)_
+_Last updated: 2026-03-22 (session 8)_
 
-**248/248 tests pass.**
+**266/266 tests pass.**
 
-Completed 2026-03-22 (session 7 — coverage report history):
+Completed 2026-03-22 (session 8 — coverage bug fix + HTML report improvements):
 
-- `coverage_report.py`: `--report=html` now writes `coverage/YYYY_MM_DD_HH_MM_SS.html` (timestamped) instead of overwriting `coverage/index.html`
-- `coverage_report.py`: added `regenerate_index()` — rewrites `coverage/index.html` as a dark-themed horizontal nav bar with an iframe viewer; links open reports in the iframe; latest report auto-loads on open; called automatically after every html report run
-- Existing `coverage/index.html` in shellframe renamed to `coverage/2026_03_22_13_48_43.html`
+- `coverage_report.py`: fixed bug where function declaration lines (`foo() {`) always showed as missed — bash's `set -x` never traces function definitions, only statements inside functions when called. Added `_FUNC_DEF_RE` regex to `count_source_lines()` to exclude function declaration lines from the executable set.
+- `coverage_report.py`: HTML report file names in summary table now link to per-file detail sections (added `id` anchors on `<h2>` elements, `<a href="#anchor">` in table rows).
+- `coverage_report.py`: HTML report now shows ptyunit version (read from `VERSION` file via `_ptyunit_version()`).
+
+**Submodule bump needed:** shellframe, shellql, seed all use ptyunit as a submodule — flag for each repo's worker or PM to schedule.
 
 **Next steps:**
-1. Update `fissible/shellframe` submodule pointer to pick up new ptyunit commit
+1. Update `fissible/shellframe` submodule pointer to pick up new ptyunit commits (sessions 7 + 8)
 2. CI workflow (GitHub Actions) for ptyunit itself
 3. Per-test coverage capture + redundancy detection
 4. Minor ergonomics: `run` helper, negative line indices, `refute_*`
