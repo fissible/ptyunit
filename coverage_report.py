@@ -333,7 +333,7 @@ def main():
     parser.add_argument('--trace', required=True, help='Path to xtrace output file')
     parser.add_argument('--src', required=True, help='Source directory to measure')
     parser.add_argument('--format', default='text', choices=['text', 'json', 'html'])
-    parser.add_argument('--min', type=float, default=0, help='Minimum coverage % (exit 1 if below)')
+    parser.add_argument('--min', type=float, default=0, help='Minimum coverage %% (exit 1 if below)')
     args = parser.parse_args()
 
     hits = parse_trace(args.trace, args.src)
