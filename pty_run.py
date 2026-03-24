@@ -22,6 +22,12 @@ Options (set via env vars):
     PTY_INIT=0.30   seconds to wait before first key (default: 0.30)
     PTY_TIMEOUT=10  seconds to wait for process exit (default: 10)
     PTY_RAW=0       set to 1 to preserve ANSI escapes in output (default: 0)
+                    WARNING: PTY_RAW=1 bypasses all ANSI stripping. Any escape
+                    sequences emitted by the child (including OSC title-sets,
+                    cursor moves, charset switches) pass through to stdout and
+                    will corrupt the parent terminal. Only use PTY_RAW=1 when
+                    stdout is redirected or you are certain the output will not
+                    reach a live terminal.
 
 Exit code: the script's own exit code (or 124 on timeout).
 """
@@ -56,10 +62,13 @@ NAMED_KEYS = {
 
 ANSI_RE = re.compile(
     rb"\x1b(?:"
-    rb"[@-Z\\-_]"                       # Fe sequences (C1, 2-char: ESC @..._)
-    rb"|[ -/]+[0-~]"                    # nF sequences: ESC + 1+ intermediate (0x20-0x2F) + final (0x30-0x7E)
-    rb"|\[[0-?]*[ -/]*[@-~]"            # CSI sequences (ESC [ ... final)
-    rb"|\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC sequences (ESC ] ... BEL or ST)
+    # ST-terminated string sequences must come before the Fe catch-all, otherwise
+    # the Fe arm ([@-Z\-_]) matches the single opener byte and the payload leaks.
+    rb"[PX^_][^\x1b]*\x1b\\"            # DCS / SOS / PM / APC  (ESC P/X/^/_ ... ST)
+    rb"|\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC                   (ESC ] ... BEL or ST)
+    rb"|[@-Z\\-_]"                       # Fe single-char sequences (after specific arms)
+    rb"|[ -/]+[0-~]"                     # nF sequences: ESC + intermediate(s) + final
+    rb"|\[[0-?]*[ -/]*[@-~]"             # CSI sequences (ESC [ ... final)
     rb")"
 )
 
