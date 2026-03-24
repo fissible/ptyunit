@@ -42,17 +42,7 @@ else
     TESTS_DIR="$(pwd)/tests"
 fi
 
-# ── Flag parsing ──────────────────────────────────────────────────────────────
-_mode="--all"
-_jobs=$(nproc 2>/dev/null || echo 4)
-_verbose=0
-_filter=""
-_name_filter=""
-_fail_fast=0
-_format="pretty"
-
-PTYUNIT_VERSION="1.0.0"
-
+# ── Usage ─────────────────────────────────────────────────────────────────────
 _usage() {
     cat << USAGE
 ptyunit $PTYUNIT_VERSION — bash test runner
@@ -88,105 +78,6 @@ USAGE
     exit 0
 }
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        -h|--help)
-            _usage ;;
-        --version)
-            printf 'ptyunit %s\n' "$PTYUNIT_VERSION"; exit 0 ;;
-        --unit|--integration|--all)
-            _mode="$1"; shift ;;
-        --debug)
-            _jobs=1; _verbose=1; shift ;;
-        --verbose|-v)
-            _verbose=1; shift ;;
-        --jobs)
-            _jobs="${2:-}"
-            if [[ -z "$_jobs" ]]; then
-                printf 'Error: --jobs requires a value\n' >&2; exit 2
-            fi
-            shift 2 ;;
-        --jobs=*)
-            _jobs="${1#--jobs=}"; shift ;;
-        --filter)
-            _filter="${2:-}"
-            if [[ -z "$_filter" ]]; then
-                printf 'Error: --filter requires a pattern\n' >&2; exit 2
-            fi
-            shift 2 ;;
-        --filter=*)
-            _filter="${1#--filter=}"; shift ;;
-        --name)
-            _name_filter="${2:-}"
-            if [[ -z "$_name_filter" ]]; then
-                printf 'Error: --name requires a pattern\n' >&2; exit 2
-            fi
-            shift 2 ;;
-        --name=*)
-            _name_filter="${1#--name=}"; shift ;;
-        --fail-fast)
-            _fail_fast=1; shift ;;
-        --format)
-            _format="${2:-}"
-            if [[ -z "$_format" ]]; then
-                printf 'Error: --format requires a value\n' >&2; exit 2
-            fi
-            shift 2 ;;
-        --format=*)
-            _format="${1#--format=}"; shift ;;
-        *)
-            printf 'Unknown flag: %s\n' "$1" >&2; exit 2 ;;
-    esac
-done
-
-# Validate --jobs value
-if ! [[ "$_jobs" =~ ^[1-9][0-9]*$ ]]; then
-    printf 'Error: --jobs requires a positive integer, got: %s\n' "$_jobs" >&2
-    exit 2
-fi
-
-# Validate --format value
-case "$_format" in
-    pretty|tap|junit) ;;
-    *) printf 'Error: unknown format: %s (expected pretty, tap, or junit)\n' "$_format" >&2; exit 2 ;;
-esac
-
-# ── Color setup ───────────────────────────────────────────────────────────────
-_use_color=0
-if [[ -n "${FORCE_COLOR:-}" && -z "${NO_COLOR:-}" ]]; then
-    _use_color=1
-elif [[ -z "${NO_COLOR:-}" ]] && [ -t 1 ]; then
-    _use_color=1
-fi
-
-if (( _use_color )); then
-    _OK_LABEL=$'\033[0;32mOK\033[0m'
-    _FAIL_LABEL=$'\033[0;31mFAIL\033[0m'
-    _SKIP_LABEL=$'\033[0;33mSKIP\033[0m'
-else
-    _OK_LABEL='OK'
-    _FAIL_LABEL='FAIL'
-    _SKIP_LABEL='SKIP'
-fi
-
-# ── Counters ──────────────────────────────────────────────────────────────────
-_total_pass=0
-_total_fail=0
-_total_files=0
-_total_skip=0
-_failed_files=()
-_skipped_files=()
-
-# Suite tracking for TAP/JUnit output
-_suite_work_dirs=()
-_suite_labels=()
-
-# Fail-fast sentinel (file-based IPC for subshells)
-_fail_sentinel=""
-if (( _fail_fast )); then
-    _fail_sentinel="${TMPDIR:-/tmp}/ptyunit-fail-$$"
-fi
-
 # ── Timing helper ─────────────────────────────────────────────────────────────
 _ptyunit_now() {
     if [[ "${BASH_VERSINFO[0]}" -ge 5 ]]; then
@@ -199,10 +90,10 @@ _ptyunit_now() {
 # ── XML escaping helper for JUnit output ─────────────────────────────────────
 _xml_escape() {
     local s="$1"
-    s="${s//&/&amp;}"
-    s="${s//</&lt;}"
-    s="${s//>/&gt;}"
-    s="${s//\"/&quot;}"
+    s="${s//&/\&amp;}"
+    s="${s//</\&lt;}"
+    s="${s//>/\&gt;}"
+    s="${s//\"/\&quot;}"
     printf '%s' "$s"
 }
 
@@ -560,94 +451,209 @@ _emit_junit() {
     printf '</testsuites>\n'
 }
 
-# ── Dispatch ──────────────────────────────────────────────────────────────────
-if [[ "$_format" == "pretty" ]]; then
-    if (( _jobs == 1 )); then
-        printf 'ptyunit test runner (sequential)\n'
-    else
-        printf 'ptyunit test runner (%d workers)\n' "$_jobs"
-    fi
-fi
+# ── Main entry point ──────────────────────────────────────────────────────────
+_main() {
+    # ── Flag defaults ─────────────────────────────────────────────────────────
+    _mode="--all"
+    _jobs=$(nproc 2>/dev/null || echo 4)
+    _verbose=0
+    _filter=""
+    _name_filter=""
+    _fail_fast=0
+    _format="pretty"
+    PTYUNIT_VERSION="1.0.0"
 
-# Export name filter for test files (checked by ptyunit_test_begin)
-if [[ -n "$_name_filter" ]]; then
-    export PTYUNIT_FILTER_NAME="$_name_filter"
-fi
-
-_fail_fast_triggered=0
-
-case "$_mode" in
-    --unit)
-        _run_suite "$TESTS_DIR/unit" "Unit"
-        ;;
-    --integration)
-        if ! command -v python3 >/dev/null 2>&1; then
-            [[ "$_format" == "pretty" ]] && printf '\nSkipping integration tests (python3 not found)\n'
-        else
-            _run_suite "$TESTS_DIR/integration" "Integration"
-        fi
-        ;;
-    --all)
-        _run_suite "$TESTS_DIR/unit" "Unit"
-        if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
-            _fail_fast_triggered=1
-        fi
-        if (( ! _fail_fast_triggered )); then
-            if command -v python3 >/dev/null 2>&1; then
-                _run_suite "$TESTS_DIR/integration" "Integration"
-            else
-                [[ "$_format" == "pretty" ]] && printf '\nSkipping integration tests (python3 not found)\n'
-            fi
-        else
-            [[ "$_format" == "pretty" ]] && printf '\nSkipping integration tests (--fail-fast)\n'
-        fi
-        ;;
-esac
-
-# ── Output / Summary ─────────────────────────────────────────────────────────
-case "$_format" in
-    tap)
-        _emit_tap
-        ;;
-    junit)
-        _emit_junit
-        ;;
-    pretty)
-        local_total=$(( _total_pass + _total_fail ))
-        printf '\n─────────────────────────────────\n'
-        printf '%d/%d assertions passed across %d file(s)\n' \
-            "$_total_pass" "$local_total" "$_total_files"
-
-        if (( _total_skip > 0 )); then
-            printf 'Skipped: %d file(s)\n' "$_total_skip"
-            for local_f in "${_skipped_files[@]}"; do
-                printf '  %s\n' "$local_f"
-            done
-        fi
-
-        if (( ${#_failed_files[@]} > 0 )); then
-            printf 'Failed files:\n'
-            for local_f in "${_failed_files[@]}"; do
-                printf '  %s\n' "$local_f"
-            done
-        fi
-        ;;
-esac
-
-# Clean up TAP/JUnit work dirs
-if (( ${#_suite_work_dirs[@]} > 0 )); then
-    for _wd in "${_suite_work_dirs[@]}"; do
-        rm -rf "$_wd"
+    # ── Arg parsing ───────────────────────────────────────────────────────────
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                _usage ;;
+            --version)
+                printf 'ptyunit %s\n' "$PTYUNIT_VERSION"; exit 0 ;;
+            --unit|--integration|--all)
+                _mode="$1"; shift ;;
+            --debug)
+                _jobs=1; _verbose=1; shift ;;
+            --verbose|-v)
+                _verbose=1; shift ;;
+            --jobs)
+                _jobs="${2:-}"
+                if [[ -z "$_jobs" ]]; then
+                    printf 'Error: --jobs requires a value\n' >&2; exit 2
+                fi
+                shift 2 ;;
+            --jobs=*)
+                _jobs="${1#--jobs=}"; shift ;;
+            --filter)
+                _filter="${2:-}"
+                if [[ -z "$_filter" ]]; then
+                    printf 'Error: --filter requires a pattern\n' >&2; exit 2
+                fi
+                shift 2 ;;
+            --filter=*)
+                _filter="${1#--filter=}"; shift ;;
+            --name)
+                _name_filter="${2:-}"
+                if [[ -z "$_name_filter" ]]; then
+                    printf 'Error: --name requires a pattern\n' >&2; exit 2
+                fi
+                shift 2 ;;
+            --name=*)
+                _name_filter="${1#--name=}"; shift ;;
+            --fail-fast)
+                _fail_fast=1; shift ;;
+            --format)
+                _format="${2:-}"
+                if [[ -z "$_format" ]]; then
+                    printf 'Error: --format requires a value\n' >&2; exit 2
+                fi
+                shift 2 ;;
+            --format=*)
+                _format="${1#--format=}"; shift ;;
+            *)
+                printf 'Unknown flag: %s\n' "$1" >&2; exit 2 ;;
+        esac
     done
-fi
 
-# Clean up fail-fast sentinel
-if [[ -n "${_fail_sentinel:-}" ]]; then
-    rm -f "$_fail_sentinel"
-fi
+    # Validate --jobs value
+    if ! [[ "$_jobs" =~ ^[1-9][0-9]*$ ]]; then
+        printf 'Error: --jobs requires a positive integer, got: %s\n' "$_jobs" >&2
+        exit 2
+    fi
 
-# Exit code
-if (( ${#_failed_files[@]} > 0 )); then
-    exit 1
-fi
-exit 0
+    # Validate --format value
+    case "$_format" in
+        pretty|tap|junit) ;;
+        *) printf 'Error: unknown format: %s (expected pretty, tap, or junit)\n' "$_format" >&2; exit 2 ;;
+    esac
+
+    # ── Color setup ───────────────────────────────────────────────────────────
+    _use_color=0
+    if [[ -n "${FORCE_COLOR:-}" && -z "${NO_COLOR:-}" ]]; then
+        _use_color=1
+    elif [[ -z "${NO_COLOR:-}" ]] && [ -t 1 ]; then
+        _use_color=1
+    fi
+
+    if (( _use_color )); then
+        _OK_LABEL=$'\033[0;32mOK\033[0m'
+        _FAIL_LABEL=$'\033[0;31mFAIL\033[0m'
+        _SKIP_LABEL=$'\033[0;33mSKIP\033[0m'
+    else
+        _OK_LABEL='OK'
+        _FAIL_LABEL='FAIL'
+        _SKIP_LABEL='SKIP'
+    fi
+
+    # ── Counters ──────────────────────────────────────────────────────────────
+    _total_pass=0
+    _total_fail=0
+    _total_files=0
+    _total_skip=0
+    _failed_files=()
+    _skipped_files=()
+
+    # Suite tracking for TAP/JUnit output
+    _suite_work_dirs=()
+    _suite_labels=()
+
+    # Fail-fast sentinel (file-based IPC for subshells)
+    _fail_sentinel=""
+    if (( _fail_fast )); then
+        _fail_sentinel="${TMPDIR:-/tmp}/ptyunit-fail-$$"
+    fi
+
+    # ── Dispatch ──────────────────────────────────────────────────────────────
+    if [[ "$_format" == "pretty" ]]; then
+        if (( _jobs == 1 )); then
+            printf 'ptyunit test runner (sequential)\n'
+        else
+            printf 'ptyunit test runner (%d workers)\n' "$_jobs"
+        fi
+    fi
+
+    # Export name filter for test files (checked by ptyunit_test_begin)
+    if [[ -n "$_name_filter" ]]; then
+        export PTYUNIT_FILTER_NAME="$_name_filter"
+    fi
+
+    _fail_fast_triggered=0
+
+    case "$_mode" in
+        --unit)
+            _run_suite "$TESTS_DIR/unit" "Unit"
+            ;;
+        --integration)
+            if ! command -v python3 >/dev/null 2>&1; then
+                [[ "$_format" == "pretty" ]] && printf '\nSkipping integration tests (python3 not found)\n'
+            else
+                _run_suite "$TESTS_DIR/integration" "Integration"
+            fi
+            ;;
+        --all)
+            _run_suite "$TESTS_DIR/unit" "Unit"
+            if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
+                _fail_fast_triggered=1
+            fi
+            if (( ! _fail_fast_triggered )); then
+                if command -v python3 >/dev/null 2>&1; then
+                    _run_suite "$TESTS_DIR/integration" "Integration"
+                else
+                    [[ "$_format" == "pretty" ]] && printf '\nSkipping integration tests (python3 not found)\n'
+                fi
+            else
+                [[ "$_format" == "pretty" ]] && printf '\nSkipping integration tests (--fail-fast)\n'
+            fi
+            ;;
+    esac
+
+    # ── Output / Summary ──────────────────────────────────────────────────────
+    case "$_format" in
+        tap)
+            _emit_tap
+            ;;
+        junit)
+            _emit_junit
+            ;;
+        pretty)
+            local_total=$(( _total_pass + _total_fail ))
+            printf '\n─────────────────────────────────\n'
+            printf '%d/%d assertions passed across %d file(s)\n' \
+                "$_total_pass" "$local_total" "$_total_files"
+
+            if (( _total_skip > 0 )); then
+                printf 'Skipped: %d file(s)\n' "$_total_skip"
+                for local_f in "${_skipped_files[@]}"; do
+                    printf '  %s\n' "$local_f"
+                done
+            fi
+
+            if (( ${#_failed_files[@]} > 0 )); then
+                printf 'Failed files:\n'
+                for local_f in "${_failed_files[@]}"; do
+                    printf '  %s\n' "$local_f"
+                done
+            fi
+            ;;
+    esac
+
+    # Clean up TAP/JUnit work dirs
+    if (( ${#_suite_work_dirs[@]} > 0 )); then
+        for _wd in "${_suite_work_dirs[@]}"; do
+            rm -rf "$_wd"
+        done
+    fi
+
+    # Clean up fail-fast sentinel
+    if [[ -n "${_fail_sentinel:-}" ]]; then
+        rm -f "$_fail_sentinel"
+    fi
+
+    # Exit code
+    if (( ${#_failed_files[@]} > 0 )); then
+        exit 1
+    fi
+    exit 0
+}
+
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && _main "$@"

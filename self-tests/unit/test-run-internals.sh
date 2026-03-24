@@ -129,6 +129,49 @@ test_that "_main unknown flag exits 2"
 ( _main --no-such-flag )
 assert_eq "2" "$?"
 
+test_that "_main --unit --format tap with no matching files exits 0"
+( _main --unit --format tap --filter __no_such_test__ ) >/dev/null
+assert_eq "0" "$?"
+
+test_that "_main --unit --format junit with no matching files exits 0"
+( _main --unit --format junit --filter __no_such_test__ ) >/dev/null
+assert_eq "0" "$?"
+
+test_that "_main --all --format pretty with no matching files exits 0"
+( _main --all --format pretty --filter __no_such_test__ ) >/dev/null
+assert_eq "0" "$?"
+
+test_that "_main --unit --fail-fast with no matching files exits 0"
+( _main --unit --fail-fast --filter __no_such_test__ ) >/dev/null
+assert_eq "0" "$?"
+
+test_that "_main --integration --format tap with no matching files exits 0"
+( _main --integration --format tap --filter __no_such_test__ ) >/dev/null
+assert_eq "0" "$?"
+
+test_that "_main --all --format tap with no matching files exits 0"
+( _main --all --format tap --filter __no_such_test__ ) >/dev/null
+assert_eq "0" "$?"
+
+test_that "_main --all --fail-fast --format pretty with no matching files exits 0"
+( _main --all --fail-fast --format pretty --filter __no_such_test__ ) >/dev/null
+assert_eq "0" "$?"
+
+# ── _run_suite ────────────────────────────────────────────────────────────────
+
+test_that "_run_suite processes a passing test file"
+_filter=""
+_format="pretty"
+_jobs=1
+_tmp_suite=$(mktemp -d)
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\ntest_that "fixture"\nassert_eq "1" "1"\nptyunit_test_summary\n' "$PTYUNIT_DIR" > "$_tmp_suite/test-pass.sh"
+chmod +x "$_tmp_suite/test-pass.sh"
+_run_suite "$_tmp_suite" "Fixture" >/dev/null
+assert_eq "0" "$?"
+assert_eq "1" "$_total_files"
+assert_eq "1" "$_total_pass"
+rm -rf "$_tmp_suite"
+
 # ── _emit_tap ─────────────────────────────────────────────────────────────────
 
 test_that "_emit_tap outputs TAP version 13 header"
