@@ -184,9 +184,31 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-22 (session 8)_
+_Last updated: 2026-03-23 (session 9)_
 
-**266/266 tests pass. Released v1.1.0.**
+**274/274 tests pass. On v1.1.1.**
+
+Completed 2026-03-23 (session 9 — coverage time bug fix, test file, v2 HTML report):
+
+- `coverage_report.py` (main): fixed `_format_display_date` 12h→24h bug (nav labels showed 9→11→1→2 at noon crossing). Changed `%I` to `%H`. Also `.gitignore` added.
+- `self-tests/unit/test-coverage-report.sh` (new): 8 unit tests for `_format_display_date`, `_parse_report_dt`, and `_ptyunit_version`.
+- Homebrew formula (`fissible/homebrew-tap`): added `"VERSION"` to `libexec.install` — fixes "ptyunit vunknown" in HTML reports generated via Homebrew install.
+- Renamed shellframe coverage files with wrong UTC timestamps to accurate PDT mtimes; regenerated index.
+- `feat/coverage-report-v2` branch (worktree at `ptyunit-coverage-v2/`): complete rewrite of HTML coverage report featuring folder hierarchy, sortable table, coverage comparison vs prev run (JSON sidecar), cyclomatic complexity badges, GitHub-style language bar, large color-tinted total %, sticky footer, active nav link in index. 274/274 tests still pass. Report generated and visually verified.
+
+**Downstream actions needed (flag for PM):**
+- Push main branch (2 commits ahead of origin: 24h time fix + unit test file)
+- Push `feat/coverage-report-v2` branch (needs PR)
+- Push homebrew-tap main (VERSION install fix) then `brew upgrade ptyunit` in shellframe
+- Submodule bump needed in: shellframe, shellql, seed (pick up v1.1.1)
+
+**Next steps:**
+1. PR: `feat/coverage-report-v2` → main, then release v1.2.0
+2. Update `fissible/shellframe` submodule pointer + Homebrew upgrade
+3. CI workflow (GitHub Actions) for ptyunit itself
+4. Per-test coverage capture + redundancy detection
+
+---
 
 Completed 2026-03-22 (session 8 — coverage bug fix + HTML report improvements + release):
 
