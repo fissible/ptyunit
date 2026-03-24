@@ -279,8 +279,11 @@ def _parse_report_dt(filename: str):
 
 
 def _format_display_date(dt: datetime.datetime) -> str:
-    """Format as 'Month D, YYYY, HH:MM' (24-hour)."""
-    return f'{dt.strftime("%B")} {dt.day}, {dt.year}, {dt.strftime("%H:%M")}'
+    """Format as 'Month D, YYYY, H:MM am/pm' (12-hour, nav sort uses filenames)."""
+    hour = int(dt.strftime('%I'))
+    minute = dt.strftime('%M')
+    ampm = dt.strftime('%p').lower()
+    return f'{dt.strftime("%B")} {dt.day}, {dt.year}, {hour}:{minute} {ampm}'
 
 
 def regenerate_index(coverage_dir: str) -> None:

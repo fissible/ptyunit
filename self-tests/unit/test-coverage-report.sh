@@ -8,42 +8,41 @@ source "$PTYUNIT_DIR/assert.sh"
 # ═══════════════════════════════════════════════════════════════════════════════
 describe "coverage_report: _format_display_date"
 
-    test_that "formats a PM time using 24-hour clock (13:30, not 1:30 pm)"
+    test_that "formats a PM time with am/pm indicator (1:30 pm)"
     _out=$(python3 -c "
 import sys; sys.path.insert(0, '$PTYUNIT_DIR')
 from coverage_report import _format_display_date
 import datetime
 print(_format_display_date(datetime.datetime(2026, 3, 23, 13, 30, 0)))
 ")
-    assert_contains "$_out" "13:30"
+    assert_contains "$_out" "1:30 pm"
 
-    test_that "formats midnight using 24-hour clock (00:00, not 12:00 am)"
+    test_that "formats midnight as 12:00 am"
     _out=$(python3 -c "
 import sys; sys.path.insert(0, '$PTYUNIT_DIR')
 from coverage_report import _format_display_date
 import datetime
 print(_format_display_date(datetime.datetime(2026, 3, 23, 0, 0, 0)))
 ")
-    assert_contains "$_out" "00:00"
+    assert_contains "$_out" "12:00 am"
 
-    test_that "does not include am/pm in the label"
+    test_that "includes am/pm in the label"
     _out=$(python3 -c "
 import sys; sys.path.insert(0, '$PTYUNIT_DIR')
 from coverage_report import _format_display_date
 import datetime
-# 1pm — would show 'pm' with 12h format
 print(_format_display_date(datetime.datetime(2026, 3, 23, 13, 0, 0)))
 ")
-    assert_eq "0" "$(printf '%s' "$_out" | grep -ci '\(am\|pm\)')"
+    assert_eq "1" "$(printf '%s' "$_out" | grep -ci '\(am\|pm\)')"
 
-    test_that "formats an AM time correctly (09:00)"
+    test_that "formats an AM time correctly (9:00 am)"
     _out=$(python3 -c "
 import sys; sys.path.insert(0, '$PTYUNIT_DIR')
 from coverage_report import _format_display_date
 import datetime
 print(_format_display_date(datetime.datetime(2026, 3, 23, 9, 0, 0)))
 ")
-    assert_contains "$_out" "09:00"
+    assert_contains "$_out" "9:00 am"
 
 end_describe
 
