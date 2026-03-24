@@ -509,6 +509,15 @@ TOTAL                         269    181     88    67%
 | `--report=html` | Timestamped HTML report in `coverage/`; `coverage/index.html` is a scrollable nav that links all runs |
 | `--min=N` | Fail if coverage is below N% (for CI gates) |
 
+To exclude files or directories from measurement (e.g. release scripts, examples), create a `.coverageignore` file at your project root:
+
+```
+# .coverageignore — one glob pattern per line
+release.sh
+scripts/
+examples/
+```
+
 > **How it works:** Each test file runs with `set -x` and a custom `PS4` that logs `file:line` to a trace file. A Python script then cross-references the trace against your source files. Works on bash 3.2 — no special tools needed.
 
 ---

@@ -184,9 +184,26 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-24 (session 14)_
+_Last updated: 2026-03-24 (session 15)_
 
-**469/469 tests pass. On v1.2.0.**
+**503/503 tests pass. On v1.2.0.**
+
+Completed 2026-03-24 (session 15 — .coverageignore support):
+
+- Added `.coverageignore` file support to `coverage_report.py`. New helpers `_load_coverageignore()` and `_is_ignored()` use `fnmatch` to filter source files. Looks for `.coverageignore` in `src_dir` and its parent.
+- Created `.coverageignore` listing `release.sh`, `coverage.sh`, `bench/`, `docker/`, `examples/` — all structurally untestable orchestration/tooling scripts.
+- Coverage now reports **71% (548/774)** instead of the misleading 44% (which included 645 untestable lines). Per-file: `assert.sh` 77%, `mock.sh` 71%, `run.sh` 67%.
+- 503/503 assertions pass (472 unit, 31 integration, 25 files). Up from 469 — new test files from session 14 (`test-assert-coverage.sh`, `test-mock-extended.sh`, `test-run-helper.sh`, `test-run-internals.sh`, `test-coverage-report.sh`) are now counted.
+
+**Downstream actions needed (flag for PM):**
+- Submodule bump needed in: shellframe, shellql, seed (pick up v1.2.0)
+
+**Next steps:**
+1. CI workflow (GitHub Actions) for ptyunit itself
+2. Update `fissible/shellframe` submodule pointer + Homebrew upgrade
+3. Optional: trailing-incomplete-sequence mitigation (ticket stub in #18)
+
+---
 
 Completed 2026-03-24 (session 14 — coverage fixes + post-release housekeeping):
 
