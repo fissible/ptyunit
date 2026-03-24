@@ -184,9 +184,29 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-23 (session 11)_
+_Last updated: 2026-03-24 (session 12)_
 
-**274/274 tests pass. On v1.1.1.**
+**469/469 tests pass. On v1.1.1.**
+
+Completed 2026-03-24 (session 12 — ANSI stripping bug fix):
+
+- Investigated issue [#18](https://github.com/fissible/ptyunit/issues/18): `ANSI_RE` ordering bug — Fe catch-all arm `[@-Z\\-_]` matched single-byte openers for OSC (`]`), DCS (`P`), SOS (`X`), PM (`^`), APC (`_`) before their dedicated multi-byte arms, leaving payloads unstripped in output.
+- Fixed `ANSI_RE` in `pty_run.py`: promoted ST-terminated arm `[PX^_][^\x1b]*\x1b\\` and OSC arm before Fe. Fe now only catches true single-char sequences.
+- Added `PTY_RAW=1` docstring warning — bypasses all stripping; corrupts parent terminal if stdout reaches a live terminal.
+- Added `self-tests/integration/test-pty-ansi-strip.sh`: 13 new regression assertions covering OSC (BEL + ST terminated), DCS, SOS, PM, APC, and raw ESC byte presence.
+- Investigation conducted via Rubber Ducky pair-programming session (`~/.config/rubber-ducky/rooms/investigation_of_pty_run2/`).
+
+**Downstream actions needed (flag for PM):**
+- Submodule bump needed in: shellframe, shellql, seed (pick up ANSI fix)
+- Consider releasing v1.1.2 (patch) for the ANSI stripping fix
+
+**Next steps:**
+1. Fix `release.sh` to update `package.json` version (XS) — before next release
+2. Update `fissible/shellframe` submodule pointer + Homebrew upgrade
+3. CI workflow (GitHub Actions) for ptyunit itself
+4. Optional: trailing-incomplete-sequence mitigation (ticket stub in #18)
+
+---
 
 Completed 2026-03-23 (session 11 — v2 report UI feedback + version fixes):
 
