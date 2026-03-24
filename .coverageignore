@@ -1,0 +1,16 @@
+# Files and directories excluded from coverage measurement.
+# These are orchestration/tooling scripts that are not unit-testable
+# via the PS4 trace mechanism.
+
+# Orchestration and release scripts (run standalone, not sourced)
+release.sh
+coverage.sh
+
+# Benchmark harnesses
+bench
+
+# Docker test-matrix runners
+docker
+
+# Example scripts
+examples

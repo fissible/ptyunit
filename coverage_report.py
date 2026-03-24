@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import datetime
+import fnmatch
 import glob
 import json
 import os
@@ -159,14 +160,46 @@ def _esc(s: str) -> str:
 _TEST_DIRS = frozenset({'tests', 'test', 'self-tests', 'self_tests', 'spec', 'specs'})
 
 
+def _load_coverageignore(src_dir: str) -> list:
+    """Return glob patterns from .coverageignore in src_dir (or its parent)."""
+    patterns = []
+    for search in (src_dir, os.path.dirname(src_dir)):
+        ignore_file = os.path.join(search, '.coverageignore')
+        if os.path.isfile(ignore_file):
+            with open(ignore_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        patterns.append(line)
+            break
+    return patterns
+
+
+def _is_ignored(filepath: str, src_dir: str, patterns: list) -> bool:
+    """Return True if filepath matches any .coverageignore pattern."""
+    rel = os.path.relpath(filepath, src_dir)
+    for pat in patterns:
+        # Strip trailing slash — used to denote directories in .coverageignore
+        pat = pat.rstrip('/')
+        if fnmatch.fnmatch(rel, pat):
+            return True
+        # Also match files inside a directory pattern (e.g. "bench" matches "bench/foo.sh")
+        if fnmatch.fnmatch(rel.split(os.sep)[0], pat):
+            return True
+    return False
+
+
 def find_source_files(src_dir: str) -> list:
-    """Find all .sh files under src_dir, skipping test directories and test files."""
+    """Find all .sh files under src_dir, skipping test directories, test files, and .coverageignore patterns."""
+    ignore_patterns = _load_coverageignore(src_dir)
     files = []
     for root, dirs, names in os.walk(src_dir):
         dirs[:] = [d for d in dirs if d not in _TEST_DIRS]
         for name in names:
             if name.endswith('.sh') and not name.startswith('test-') and not name.endswith('-test.sh'):
-                files.append(os.path.join(root, name))
+                filepath = os.path.join(root, name)
+                if not _is_ignored(filepath, src_dir, ignore_patterns):
+                    files.append(filepath)
     return sorted(files)
 
 
