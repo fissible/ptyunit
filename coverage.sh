@@ -103,7 +103,11 @@ _run_cov_file() {
     passed="${_summary%%/*}"
     total="${_summary#*/}"; total="${total%% *}"
 
-    if (( rc == 0 )); then
+    if (( rc == 3 )); then
+        local skip_reason
+        skip_reason=$(printf '%s\n' "$out" | grep -oE '\([^)]+\)' | head -1)
+        printf 'SKIP%s\n' "${skip_reason:+ $skip_reason}"
+    elif (( rc == 0 )); then
         (( _total_pass += ${passed:-0} ))
         (( _total_fail += $(( ${total:-0} - ${passed:-0} )) ))
         printf 'OK (%s/%s)\n' "${passed:-?}" "${total:-?}"

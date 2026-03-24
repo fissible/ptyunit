@@ -215,4 +215,15 @@ out=$(bash -c "
 assert_contains "$out" "LOG=S"
 assert_not_contains "$out" "LOG=SS"
 
+# ── inline nested describe — covers assert.sh lines 136, 159 ─────────────────
+# (All describe tests above run inside bash -c subshells; this block exercises
+# the nested-stack code paths inline so the PS4 tracer captures them.)
+
+describe "outer scope"
+    describe "inner scope"
+        test_that "describe: inline nested — name includes both levels"
+        assert_contains "$_PTYUNIT_TEST_NAME" "outer scope > inner scope"
+    end_describe
+end_describe
+
 ptyunit_test_summary

@@ -122,4 +122,15 @@ _out=$(cd "$_d" && PTYUNIT_FILTER_NAME="match" bash "$_d/tests/unit/test-hooks.s
 assert_contains "$_out" "LOG=ST"   "only one setup+teardown pair"
 rm -rf "$_d"
 
+# ── inline filter rejection — covers assert.sh lines 99-100 ──────────────────
+# (All --name tests above invoke run.sh in subshells; this exercises the
+# filter-rejection branch of ptyunit_test_begin inline for PS4 coverage.)
+
+ptyunit_test_begin "--name inline: unfiltered section"
+assert_eq "no filter active" "no filter active"
+PTYUNIT_FILTER_NAME="__no_match__"
+ptyunit_test_begin "--name inline: this section is filtered"
+# Body is skipped (_PTYUNIT_SECTION_FILTERED=1) — no assertions here
+PTYUNIT_FILTER_NAME=""
+
 ptyunit_test_summary
