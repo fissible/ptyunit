@@ -98,10 +98,12 @@ _run_cov_file() {
     " 2>/dev/null)
     local rc=$?
 
+    local passed total _summary
+    _summary=$(printf '%s\n' "$out" | grep -oE '[0-9]+/[0-9]+ tests passed' | head -1)
+    passed="${_summary%%/*}"
+    total="${_summary#*/}"; total="${total%% *}"
+
     if (( rc == 0 )); then
-        local passed total
-        passed=$(printf '%s\n' "$out" | grep -o '[0-9]*/[0-9]*' | head -1 | cut -d/ -f1)
-        total=$(printf '%s\n' "$out" | grep -o '[0-9]*/[0-9]*' | head -1 | cut -d/ -f2)
         (( _total_pass += ${passed:-0} ))
         (( _total_fail += $(( ${total:-0} - ${passed:-0} )) ))
         printf 'OK (%s/%s)\n' "${passed:-?}" "${total:-?}"
@@ -109,9 +111,6 @@ _run_cov_file() {
         printf 'FAIL\n'
         printf '%s\n' "$out" | sed 's/^/    /'
         _failed_files+=("$name")
-        local passed total
-        passed=$(printf '%s\n' "$out" | grep -o '[0-9]*/[0-9]*' | head -1 | cut -d/ -f1)
-        total=$(printf '%s\n' "$out" | grep -o '[0-9]*/[0-9]*' | head -1 | cut -d/ -f2)
         (( _total_pass += ${passed:-0} ))
         (( _total_fail += $(( ${total:-0} - ${passed:-0} )) ))
     fi

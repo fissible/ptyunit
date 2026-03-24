@@ -172,7 +172,7 @@ _run_job() {
     fi
 
     local passed=0 total=0
-    if [[ "$out" =~ ([0-9]+)/([0-9]+) ]]; then
+    if [[ "$out" =~ ([0-9]+)/([0-9]+)[[:space:]]tests[[:space:]]passed ]]; then
         passed="${BASH_REMATCH[1]}"
         total="${BASH_REMATCH[2]}"
     fi
@@ -461,7 +461,7 @@ _main() {
     _name_filter=""
     _fail_fast=0
     _format="pretty"
-    PTYUNIT_VERSION="1.0.0"
+    PTYUNIT_VERSION=$(cat "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/VERSION" 2>/dev/null || printf '1.0.0')
 
     # ── Arg parsing ───────────────────────────────────────────────────────────
     while [[ $# -gt 0 ]]; do
