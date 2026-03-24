@@ -606,7 +606,7 @@ git add run.sh self-tests/unit/test-run-internals.sh
 git commit -m "feat(run): add _main() guard so run.sh can be sourced for unit testing
 
 Moves all execution code into _main(). Functions stay at file scope.
-Adds self-tests/unit/test-run-internals.sh with 29 assertions covering
+Adds self-tests/unit/test-run-internals.sh with 30 assertions covering
 _xml_escape, _ptyunit_now, _main arg validation, _emit_tap, _emit_junit.
 run.sh coverage improves from 0% to >= 50%."
 ```
