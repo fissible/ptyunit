@@ -184,26 +184,29 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-23 (session 9)_
+_Last updated: 2026-03-23 (session 10)_
 
 **274/274 tests pass. On v1.1.1.**
 
-Completed 2026-03-23 (session 9 — coverage time bug fix, test file, v2 HTML report):
+Completed 2026-03-23 (session 10 — v2 report UI feedback fixes):
 
-- `coverage_report.py` (main): fixed `_format_display_date` 12h→24h bug (nav labels showed 9→11→1→2 at noon crossing). Changed `%I` to `%H`. Also `.gitignore` added.
-- `self-tests/unit/test-coverage-report.sh` (new): 8 unit tests for `_format_display_date`, `_parse_report_dt`, and `_ptyunit_version`.
-- Homebrew formula (`fissible/homebrew-tap`): added `"VERSION"` to `libexec.install` — fixes "ptyunit vunknown" in HTML reports generated via Homebrew install.
-- Renamed shellframe coverage files with wrong UTC timestamps to accurate PDT mtimes; regenerated index.
-- `feat/coverage-report-v2` branch (worktree at `ptyunit-coverage-v2/`): complete rewrite of HTML coverage report featuring folder hierarchy, sortable table, coverage comparison vs prev run (JSON sidecar), cyclomatic complexity badges, GitHub-style language bar, large color-tinted total %, sticky footer, active nav link in index. 274/274 tests still pass. Report generated and visually verified.
+- `coverage_report.py` (main): reverted `_format_display_date` back to 12h + am/pm (24h was wrong; nav sort is filename-based so display format is independent). Updated tests accordingly.
+- `feat/coverage-report-v2` (worktree): iterated on HTML report based on visual review:
+  - Fixed double-spacing in source view: root cause was `'\n'.join(source_sections)` putting literal newlines between `<span>` elements inside `<pre>`. Fix: collect line spans into a local list, join with `''`.
+  - Fixed 24h time in report header/footer (`dt_str` was still using `%H:%M`; changed to call `_format_display_date()`).
+  - Fixed directory prefix appearing after filename — moved before.
+  - Removed language analysis bar (pointless for bash-only tool).
+  - Added bash syntax highlighting: keywords (blue), strings (orange), comments (green italic), variables (light blue) via `_highlight_bash()` tokenizer.
+  - CSS: font-size 13→14px, coverage bar 60×4→80×8px, code background `#111`, line-number border-right separator, tighter line-height (1.45).
 
 **Downstream actions needed (flag for PM):**
-- Push main branch (2 commits ahead of origin: 24h time fix + unit test file)
+- Push main branch (4 commits ahead of origin)
 - Push `feat/coverage-report-v2` branch (needs PR)
 - Push homebrew-tap main (VERSION install fix) then `brew upgrade ptyunit` in shellframe
 - Submodule bump needed in: shellframe, shellql, seed (pick up v1.1.1)
 
 **Next steps:**
-1. PR: `feat/coverage-report-v2` → main, then release v1.2.0
+1. User approval of v2 report → PR `feat/coverage-report-v2` → main, release v1.2.0
 2. Update `fissible/shellframe` submodule pointer + Homebrew upgrade
 3. CI workflow (GitHub Actions) for ptyunit itself
 4. Per-test coverage capture + redundancy detection
