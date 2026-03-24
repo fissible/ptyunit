@@ -46,6 +46,17 @@ def _ptyunit_version() -> str:
         return 'unknown'
 
 
+def _pct_color(pct: float) -> str:
+    """Return a CSS color string for a coverage percentage."""
+    if pct >= 90:
+        return '#4caf50'
+    if pct >= 80:
+        return '#8bc34a'
+    if pct >= 60:
+        return '#ff9800'
+    return '#f44336'
+
+
 def _highlight_bash(text: str) -> str:
     """Tokenize a bash source line and return syntax-highlighted HTML."""
     out = []
@@ -145,12 +156,16 @@ def _esc(s: str) -> str:
 
 # ── Source analysis ────────────────────────────────────────────────────────────
 
+_TEST_DIRS = frozenset({'tests', 'test', 'self-tests', 'self_tests', 'spec', 'specs'})
+
+
 def find_source_files(src_dir: str) -> list:
-    """Find all .sh files under src_dir."""
+    """Find all .sh files under src_dir, skipping test directories and test files."""
     files = []
-    for root, _, names in os.walk(src_dir):
+    for root, dirs, names in os.walk(src_dir):
+        dirs[:] = [d for d in dirs if d not in _TEST_DIRS]
         for name in names:
-            if name.endswith('.sh'):
+            if name.endswith('.sh') and not name.startswith('test-') and not name.endswith('-test.sh'):
                 files.append(os.path.join(root, name))
     return sorted(files)
 
@@ -371,7 +386,7 @@ def _delta_html(prev_pct: float, curr_pct: float, data_only: bool = False) -> st
     if abs(delta) < 0.05:
         if data_only:
             return '0'
-        return '<span class="d d-flat" data-val="0">—</span>'
+        return '<span class="d d-flat" title="No change from previous run" data-val="0">±0</span>'
     if delta > 0:
         if data_only:
             return f'{delta:.2f}'
@@ -513,7 +528,6 @@ body{
   flex-wrap:wrap;gap:8px 18px;
 }
 .total-pct{font-size:2.4em;font-weight:700;line-height:1}
-.total-pct.pup{color:#4caf50}.total-pct.pdn{color:#f44336}.total-pct.pne{color:#d4d4d4}
 .total-lines{color:#777;font-size:0.88em}
 .total-delta{font-size:0.8em;font-weight:700;padding:2px 8px;border-radius:3px}
 .total-delta.tup{background:#0d1f0d;color:#4caf50}
@@ -595,7 +609,7 @@ a.fl:hover{text-decoration:underline}
 }
 .fg[open]>summary .chv,.fs[open]>summary .chv{transform:rotate(90deg)}
 .flabel{color:#999;font-weight:700;flex:1;font-size:0.92em}
-.fstats{color:#555;font-size:0.8em}
+.fstats{color:#c8c8c8;font-size:0.8em}
 .fpct{font-weight:700}
 
 /* ── File sections (inside folder groups) ────────────────────── */
@@ -606,7 +620,7 @@ a.fl:hover{text-decoration:underline}
 }
 .fs>summary:hover{background:#1b1b1b}
 .fs-name{color:#4e8cbf;flex:1;font-size:0.9em}
-.fs-stats{color:#555;font-size:0.78em}
+.fs-stats{color:#c8c8c8;font-size:0.78em}
 
 /* ── Annotated source ────────────────────────────────────────── */
 pre.src{margin:0;font-size:0.88em;overflow-x:auto;
@@ -728,17 +742,13 @@ def format_html(
     if prev_total_pct is not None:
         total_delta = total_pct - prev_total_pct
         if total_delta > 0.05:
-            pct_cls = 'pup'
             delta_html = (f'<span class="total-delta tup">▲ +{total_delta:.1f}%</span>')
         elif total_delta < -0.05:
-            pct_cls = 'pdn'
             delta_html = (f'<span class="total-delta tdn">▼ {total_delta:.1f}%</span>')
         else:
-            pct_cls = 'pne'
             delta_html = ''
         note = _threshold_note(total_pct, total_delta)
     else:
-        pct_cls = 'pne'
         delta_html = ''
         note = _threshold_note(total_pct)
 
@@ -781,7 +791,8 @@ def format_html(
             delta_cell = '<span class="new-badge">new</span>'
             delta_val = '0'
         else:
-            delta_cell = '<span class="d d-flat">—</span>'
+            # No previous run to compare against — leave cell empty
+            delta_cell = ''
             delta_val = '0'
 
         tbody_rows.append(
@@ -829,7 +840,7 @@ def format_html(
             f'<span class="flabel">{_esc(folder_label)}</span>'
             f'<span class="fstats">'
             f'{len(grp["files"])} file{"s" if len(grp["files"]) != 1 else ""}'
-            f' · <span class="fpct">{grp["pct"]:.0f}%</span>'
+            f' · <span class="fpct" style="color:{_pct_color(grp["pct"])}">{grp["pct"]:.0f}%</span>'
             f'{folder_delta}'
             f'</span>'
             f'</summary>'
@@ -872,7 +883,7 @@ def format_html(
                 f'<span class="chv">▶</span>'
                 f'<span class="fs-name">{_esc(fname)}</span>'
                 f'<span class="fs-stats">'
-                f'{r["hit"]}/{r["total"]} · {r["pct"]:.0f}%'
+                f'{r["hit"]}/{r["total"]} · <span style="color:{_pct_color(r["pct"])};font-weight:700">{r["pct"]:.0f}%</span>'
                 f'{file_delta}'
                 f'</span>'
                 f'</summary>'
@@ -904,7 +915,7 @@ def format_html(
 
         # Total bar
         f'<div class="total-bar">',
-        f'<span class="total-pct {pct_cls}">{total_pct:.0f}%</span>',
+        f'<span class="total-pct" style="color:{_pct_color(total_pct)}">{total_pct:.0f}%</span>',
         f'<span class="total-lines">{total_hit:,} / {total_total:,} lines covered</span>',
         delta_html,
         f'<span class="total-note">{_esc(note)}</span>',
