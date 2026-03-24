@@ -30,12 +30,107 @@ _BRANCH_RE = re.compile(
     r'\bif\b|\belif\b|\bwhile\b|\bfor\b|\buntil\b|\bcase\b|\|\||\&\&'
 )
 
+_BASH_KEYWORDS = frozenset({
+    'if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'do', 'done',
+    'case', 'esac', 'in', 'function', 'return', 'local', 'export',
+    'declare', 'readonly', 'break', 'continue', 'exit', 'source',
+    'select', 'until', 'shift', 'unset', 'set', 'true', 'false',
+    'echo', 'printf', 'read', 'exec', 'eval',
+})
+
 
 def _ptyunit_version() -> str:
     try:
         return (Path(__file__).parent / 'VERSION').read_text().strip()
     except (IOError, OSError):
         return 'unknown'
+
+
+def _highlight_bash(text: str) -> str:
+    """Tokenize a bash source line and return syntax-highlighted HTML."""
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        # Comment: # to end of line
+        if c == '#':
+            out.append(f'<span class="hc">{_esc(text[i:])}</span>')
+            break
+        # Single-quoted string
+        if c == "'":
+            j = text.find("'", i + 1)
+            j = j + 1 if j != -1 else n
+            out.append(f'<span class="hs">{_esc(text[i:j])}</span>')
+            i = j
+            continue
+        # Double-quoted string
+        if c == '"':
+            j = i + 1
+            while j < n:
+                if text[j] == '\\':
+                    j += 2
+                elif text[j] == '"':
+                    j += 1
+                    break
+                else:
+                    j += 1
+            out.append(f'<span class="hs">{_esc(text[i:j])}</span>')
+            i = j
+            continue
+        # Backtick command substitution
+        if c == '`':
+            j = text.find('`', i + 1)
+            j = j + 1 if j != -1 else n
+            out.append(f'<span class="hv">{_esc(text[i:j])}</span>')
+            i = j
+            continue
+        # Variable: $VAR  ${...}  $(...)
+        if c == '$':
+            j = i + 1
+            if j < n:
+                nc = text[j]
+                if nc == '{':
+                    depth, j = 1, j + 1
+                    while j < n and depth:
+                        if text[j] == '{':
+                            depth += 1
+                        elif text[j] == '}':
+                            depth -= 1
+                        j += 1
+                elif nc == '(':
+                    depth, j = 1, j + 1
+                    while j < n and depth:
+                        if text[j] == '(':
+                            depth += 1
+                        elif text[j] == ')':
+                            depth -= 1
+                        j += 1
+                elif nc.isalpha() or nc == '_':
+                    while j < n and (text[j].isalnum() or text[j] == '_'):
+                        j += 1
+                elif nc in '#?@*!-':
+                    j += 1
+                elif nc.isdigit():
+                    j += 1
+            out.append(f'<span class="hv">{_esc(text[i:j])}</span>')
+            i = j
+            continue
+        # Word — keyword or plain identifier
+        if c.isalpha() or c == '_':
+            j = i
+            while j < n and (text[j].isalnum() or text[j] in '_-'):
+                j += 1
+            word = text[i:j]
+            if word in _BASH_KEYWORDS:
+                out.append(f'<span class="hk">{_esc(word)}</span>')
+            else:
+                out.append(_esc(word))
+            i = j
+            continue
+        out.append(_esc(c))
+        i += 1
+    return ''.join(out)
 
 
 def _file_anchor(relative: str) -> str:
@@ -402,7 +497,7 @@ html{scroll-behavior:smooth}
 /* ── Base ────────────────────────────────────────────────────── */
 body{
   font-family:'Cascadia Code','SF Mono','Fira Code','Consolas',monospace;
-  background:#161616;color:#c8c8c8;font-size:13px;line-height:1.5;
+  background:#161616;color:#c8c8c8;font-size:14px;line-height:1.5;
   padding-bottom:52px;
 }
 
@@ -454,10 +549,10 @@ main{padding:0 28px 40px;max-width:1600px}
 
 /* ── Coverage mini-bar ───────────────────────────────────────── */
 .bar{
-  display:inline-flex;width:60px;height:4px;border-radius:2px;
-  overflow:hidden;background:#242424;vertical-align:middle;margin-left:5px;
+  display:inline-flex;width:80px;height:8px;border-radius:3px;
+  overflow:hidden;background:#242424;vertical-align:middle;margin-left:6px;
 }
-.bh{background:#3a7a3a}.bm{background:#7a3a3a}
+.bh{background:#3a8a3a}.bm{background:#8a3a3a}
 .pv{font-weight:700}
 
 /* ── Delta badges ────────────────────────────────────────────── */
@@ -515,25 +610,27 @@ a.fl:hover{text-decoration:underline}
 
 /* ── Annotated source ────────────────────────────────────────── */
 pre.src{margin:0;font-size:0.88em;overflow-x:auto;
-        border-bottom:2px solid #1e1e1e}
-.sl{display:block;padding:0 12px 0 26px;white-space:pre;line-height:1.6}
+        border-bottom:2px solid #1e1e1e;font-family:inherit;background:#111}
+.sl{display:block;padding:0 12px 0 0;white-space:pre;line-height:1.45}
 .sl:hover{background:#1b1b1b}
-.sl-h{background:#0a1a0a}.sl-m{background:#1a0a0a}
+.sl-h{background:#0e2d18}.sl-m{background:#2d1010}
 .ln{
   display:inline-block;width:3.5em;color:#3a3a3a;
-  text-align:right;margin-right:1.5em;
+  text-align:right;padding-right:10px;margin-right:10px;
+  border-right:1px solid #272727;
   font-variant-numeric:tabular-nums;user-select:none;
 }
+.sl-h .ln{border-right-color:#1e5530;color:#3a6a4a}
+.sl-m .ln{border-right-color:#5a1e1e;color:#7a4040}
 
-/* ── Language bar ────────────────────────────────────────────── */
-.lang-section{padding:8px 28px 10px;border-bottom:1px solid #1e1e1e;background:#161616}
-.lang-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-bottom:7px}
-.lang-seg{height:100%}
-.lang-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:0.76em}
-.lang-dot{display:inline-block;width:8px;height:8px;border-radius:50%;
-          margin-right:4px;vertical-align:middle;flex-shrink:0}
-.lang-name{color:#bbb}
-.lang-pct{color:#555;margin-left:3px}
+/* ── Syntax highlighting ─────────────────────────────────────── */
+.hk{color:#569cd6}
+.hs{color:#ce9178}
+.hc{color:#6a9955;font-style:italic}
+.hv{color:#9cdcfe}
+
+/* ── File dir in table ───────────────────────────────────────── */
+.fdir{color:#666;font-size:0.9em}
 
 /* ── Sticky footer ───────────────────────────────────────────── */
 .foot{
@@ -623,7 +720,7 @@ def format_html(
     app_name = (app_info or {}).get('name') or 'Coverage Report'
     app_ver = (app_info or {}).get('version')
     dt = generated_dt or datetime.datetime.now()
-    dt_str = dt.strftime('%B %-d, %Y, %H:%M')
+    dt_str = _format_display_date(dt)
     dt_iso = dt.strftime('%Y-%m-%dT%H:%M:%S')
 
     # ── Total bar: compute delta and tint ────────────────────────────────────
@@ -663,8 +760,8 @@ def format_html(
         fdir = ('/'.join(parts[:-1]) + '/') if len(parts) > 1 else ''
 
         # Coverage bar
-        hit_w = max(0, min(60, int(r['pct'] * 0.6)))
-        miss_w = 60 - hit_w
+        hit_w = max(0, min(80, int(r['pct'] * 0.8)))
+        miss_w = 80 - hit_w
         bar = (f'<span class="bar"><span class="bh" style="width:{hit_w}px"></span>'
                f'<span class="bm" style="width:{miss_w}px"></span></span>')
 
@@ -688,8 +785,8 @@ def format_html(
         tbody_rows.append(
             f'<tr class="fr">'
             f'<td data-val="{_esc(r["relative"])}">'
-            f'<a href="#{anchor}" class="fl">{_esc(fname)}</a>'
             f'{"<span class=fdir>" + _esc(fdir) + "</span>" if fdir else ""}'
+            f'<a href="#{anchor}" class="fl">{_esc(fname)}</a>'
             f'</td>'
             f'<td class="r" data-val="{r["total"]}">{r["total"]}</td>'
             f'<td class="r" data-val="{r["hit"]}">{r["hit"]}</td>'
@@ -749,6 +846,24 @@ def format_html(
             elif prev_stats is not None:
                 file_delta = ' <span class="new-badge">new</span>'
 
+            line_spans = []
+            try:
+                with open(r['file'], 'r', errors='replace') as fh:
+                    for i, line in enumerate(fh, 1):
+                        highlighted = _highlight_bash(line.rstrip())
+                        if i in executable:
+                            cls = 'sl-m' if i in missed_set else 'sl-h'
+                            line_spans.append(
+                                f'<span class="sl {cls}"><span class="ln">{i}</span>{highlighted}</span>'
+                            )
+                        else:
+                            line_spans.append(
+                                f'<span class="sl"><span class="ln">{i}</span>{highlighted}</span>'
+                            )
+            except (IOError, OSError):
+                line_spans.append('<span class="sl">(could not read source)</span>')
+
+            # Join spans with no separator — newlines inside <pre> render as blank lines
             source_sections.append(
                 f'<details class="fs" id="{anchor}">'
                 f'<summary>'
@@ -759,56 +874,10 @@ def format_html(
                 f'{file_delta}'
                 f'</span>'
                 f'</summary>'
-                f'<pre class="src"><code>'
+                f'<pre class="src"><code>{"".join(line_spans)}</code></pre>'
+                f'</details>'
             )
-
-            try:
-                with open(r['file'], 'r', errors='replace') as fh:
-                    for i, line in enumerate(fh, 1):
-                        line_esc = (_esc(line.rstrip()))
-                        if i in executable:
-                            cls = 'sl-m' if i in missed_set else 'sl-h'
-                            source_sections.append(
-                                f'<span class="sl {cls}">'
-                                f'<span class="ln">{i}</span>{line_esc}'
-                                f'</span>'
-                            )
-                        else:
-                            source_sections.append(
-                                f'<span class="sl">'
-                                f'<span class="ln">{i}</span>{line_esc}'
-                                f'</span>'
-                            )
-            except (IOError, OSError):
-                source_sections.append('<span class="sl">(could not read source)</span>')
-
-            source_sections.append('</code></pre></details>')
         source_sections.append('</details>')
-
-    # ── Languages bar ────────────────────────────────────────────────────────
-    langs = detect_languages(results)
-    if langs:
-        lang_segs = ''.join(
-            f'<span class="lang-seg" style="width:{l["pct"]}%;background:{l["color"]}"'
-            f' title="{_esc(l["lang"])} {l["pct"]}%"></span>'
-            for l in langs
-        )
-        lang_legend = ''.join(
-            f'<span>'
-            f'<span class="lang-dot" style="background:{l["color"]}"></span>'
-            f'<span class="lang-name">{_esc(l["lang"])}</span>'
-            f'<span class="lang-pct">{l["pct"]}%</span>'
-            f'</span>'
-            for l in langs
-        )
-        lang_html = (
-            f'<div class="lang-section">'
-            f'<div class="lang-bar">{lang_segs}</div>'
-            f'<div class="lang-legend">{lang_legend}</div>'
-            f'</div>'
-        )
-    else:
-        lang_html = ''
 
     # ── Footer path ──────────────────────────────────────────────────────────
     footer_path = _esc(script_path or str(Path(__file__).resolve().parent))
@@ -838,9 +907,6 @@ def format_html(
         delta_html,
         f'<span class="total-note">{_esc(note)}</span>',
         f'</div>',
-
-        # Language bar
-        lang_html,
 
         # Main content
         f'<main>',
@@ -896,8 +962,11 @@ def _parse_report_dt(filename: str):
 
 
 def _format_display_date(dt: datetime.datetime) -> str:
-    """Format as 'Month D, YYYY, HH:MM' (24-hour)."""
-    return f'{dt.strftime("%B")} {dt.day}, {dt.year}, {dt.strftime("%H:%M")}'
+    """Format as 'Month D, YYYY, H:MM am/pm' (12-hour, nav sort uses filenames)."""
+    hour = int(dt.strftime('%I'))
+    minute = dt.strftime('%M')
+    ampm = dt.strftime('%p').lower()
+    return f'{dt.strftime("%B")} {dt.day}, {dt.year}, {hour}:{minute} {ampm}'
 
 
 def regenerate_index(coverage_dir: str) -> None:
