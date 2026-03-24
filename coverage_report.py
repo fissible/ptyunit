@@ -746,7 +746,9 @@ def format_html(
     meta_parts = []
     if app_ver:
         meta_parts.append(f'v{app_ver}')
-    meta_parts.append(f'ptyunit v{version}')
+    # Skip "ptyunit vX" attribution when measuring ptyunit itself (redundant)
+    if app_name != 'ptyunit':
+        meta_parts.append(f'ptyunit v{version}')
     meta_parts.append(f'<time datetime="{dt_iso}">{dt_str}</time>')
     app_meta = ' · '.join(meta_parts)
 
