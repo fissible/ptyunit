@@ -42,6 +42,7 @@ lines=()
 # ── Internal fail reporter (shared by all assertions) ────────────────────────
 
 _ptyunit_report_fail() {
+    # @pty_skip — only reachable when an assertion fails; tested via bash -c subshells
     local msg="${1:-}" details="${2:-}"
     (( _PTYUNIT_TEST_FAIL++ )) || true
     printf 'FAIL'
@@ -231,6 +232,7 @@ assert_eq() {
     if [[ "$expected" == "$actual" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected: %q\n  actual:   %q' "$expected" "$actual")"
     fi
 }
@@ -242,6 +244,7 @@ assert_not_eq() {
     if [[ "$expected" != "$actual" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected not equal to: %q' "$expected")"
     fi
 }
@@ -264,6 +267,7 @@ assert_contains() {
     if [[ "$haystack" == *"$needle"* ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected to contain: %q\n  actual: %q' "$needle" "$haystack")"
     fi
 }
@@ -275,6 +279,7 @@ assert_not_contains() {
     if [[ "$haystack" != *"$needle"* ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected NOT to contain: %q\n  actual: %q' "$needle" "$haystack")"
     fi
 }
@@ -287,6 +292,7 @@ assert_true() {
     if "$@" 2>/dev/null; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "expected true: $msg"
     fi
 }
@@ -299,6 +305,7 @@ assert_false() {
     if ! "$@" 2>/dev/null; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "expected false: $msg"
     fi
 }
@@ -310,6 +317,7 @@ assert_null() {
     if [[ -z "$value" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected empty, got: %q' "$value")"
     fi
 }
@@ -321,6 +329,7 @@ assert_not_null() {
     if [[ -n "$value" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "  expected non-empty string"
     fi
 }
@@ -333,6 +342,7 @@ assert_match() {
     if [[ "$string" =~ $pattern ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected match: %s\n  actual:         %q' "$pattern" "$string")"
     fi
 }
@@ -345,6 +355,7 @@ assert_file_exists() {
     if [[ -f "$path" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  file does not exist: %s' "$path")"
     fi
 }
@@ -356,6 +367,7 @@ assert_line() {
     local expected="$1" line_number="$2" output="$3" msg="${4:-}"
     # Validate line_number is a positive integer
     if ! [[ "$line_number" =~ ^[1-9][0-9]*$ ]]; then
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  line_number must be a positive integer, got: %s' "$line_number")"
         return
     fi
@@ -368,6 +380,7 @@ assert_line() {
         fi
     done <<< "$output"
     if (( _ptyunit_i < line_number )); then
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  output has %d lines, requested line %d' "$_ptyunit_i" "$line_number")"
         return
     fi
@@ -387,6 +400,7 @@ assert_count() {
     if (( count == expected )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected %d occurrence(s) of: %q\n  actual count: %d' "$expected" "$needle" "$count")"
     fi
 }
@@ -399,6 +413,7 @@ assert_gt() {
     if (( actual > threshold )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected: %s > %s' "$actual" "$threshold")"
     fi
 }
@@ -411,6 +426,7 @@ assert_lt() {
     if (( actual < threshold )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected: %s < %s' "$actual" "$threshold")"
     fi
 }
@@ -423,6 +439,7 @@ assert_ge() {
     if (( actual >= threshold )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected: %s >= %s' "$actual" "$threshold")"
     fi
 }
@@ -435,6 +452,7 @@ assert_le() {
     if (( actual <= threshold )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip
         _ptyunit_report_fail "$msg" "$(printf '  expected: %s <= %s' "$actual" "$threshold")"
     fi
 }
@@ -482,6 +500,7 @@ ptyunit_pass() {
 
 ptyunit_fail() {
     (( _PTYUNIT_SKIP_CURRENT )) && return
+    # @pty_skip — rest of body only reachable when a custom assertion fails inline
     local msg="${1:-assertion failed}"
     (( _PTYUNIT_TEST_FAIL++ )) || true
     printf 'FAIL'
@@ -504,6 +523,7 @@ ptyunit_test_summary() {
         printf 'OK  %d/%d tests passed%s\n' "$_PTYUNIT_TEST_PASS" "$total" "$skip_msg"
         return 0
     else
+        # @pty_skip — only reached when inline tests fail; covered via subshell tests
         printf 'FAIL  %d/%d tests passed (%d failed)%s\n' \
             "$_PTYUNIT_TEST_PASS" "$total" "$_PTYUNIT_TEST_FAIL" "$skip_msg"
         return 1

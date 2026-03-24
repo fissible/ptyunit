@@ -159,6 +159,14 @@ def _esc(s: str) -> str:
 
 _TEST_DIRS = frozenset({'tests', 'test', 'self-tests', 'self_tests', 'spec', 'specs'})
 
+# Lines (or blocks) annotated with this pragma are excluded from the executable
+# set entirely — neither hit nor miss. Two forms:
+#   Standalone comment:  # @pty_skip          → excludes all lines until the
+#                                               block closes (same or lower indent)
+#   Inline:              some code  # @pty_skip → excludes just that one line
+_NOCOVER_PRAGMA = re.compile(r'#\s*@pty_skip\b')
+_BLOCK_CLOSERS = frozenset({'fi', 'done', 'esac', ';;', ')', '}'})
+
 
 def _load_coverageignore(src_dir: str) -> list:
     """Return glob patterns from .coverageignore in src_dir (or its parent)."""
@@ -204,21 +212,49 @@ def find_source_files(src_dir: str) -> list:
 
 
 def count_source_lines(filepath: str) -> dict:
-    """Return {line_number: line_content} for executable lines."""
+    """Return {line_number: line_content} for executable lines.
+
+    Lines annotated with # @pty_skip are excluded from the executable set.
+    Two forms:
+      Standalone comment  → block skip: excludes all following lines until a
+                            block-closer (fi/done/esac/}/)) at the same or
+                            lower indentation level.
+      Inline on code line → single-line skip: excludes only that line.
+    """
     executable = {}
+    skip_indent = None  # set to indent level when inside a @pty_skip block
     try:
         with open(filepath, 'r', errors='replace') as f:
             for i, line in enumerate(f, 1):
                 stripped = line.strip()
                 if not stripped:
                     continue
+
+                indent = len(line) - len(line.lstrip())
+
+                # ── @pty_skip block: check for end-of-block ───────────────
+                if skip_indent is not None:
+                    if indent <= skip_indent and stripped in _BLOCK_CLOSERS:
+                        skip_indent = None  # block closed; resume normal counting
+                    continue  # line is inside skip block (or the closer itself)
+
+                # ── Pure comment line ─────────────────────────────────────
                 if stripped.startswith('#'):
+                    if _NOCOVER_PRAGMA.search(stripped):
+                        skip_indent = indent  # begin block skip
                     continue
+
+                # ── Structural keywords (never executable) ────────────────
                 if stripped in ('{', '}', 'fi', 'do', 'done', 'then', 'else',
                                 'elif', 'esac', ';;', ')', ';;)', '*)'):
                     continue
                 if _FUNC_DEF_RE.match(stripped):
                     continue
+
+                # ── Inline @pty_skip pragma on a code line ────────────────
+                if _NOCOVER_PRAGMA.search(line):
+                    continue
+
                 executable[i] = stripped
     except (IOError, OSError):
         pass
