@@ -205,6 +205,17 @@ def detect_app_info(src_dir: str) -> dict:
         search_dirs.append(parent)
 
     for d in search_dirs:
+        ver_file = os.path.join(d, 'VERSION')
+        if os.path.isfile(ver_file):
+            try:
+                v = Path(ver_file).read_text().strip()
+                if v:
+                    version = version or v
+                    break
+            except (IOError, OSError):
+                pass
+
+    for d in search_dirs:
         pkg = os.path.join(d, 'package.json')
         if os.path.isfile(pkg):
             try:
@@ -213,18 +224,6 @@ def detect_app_info(src_dir: str) -> dict:
                 version = version or data.get('version')
             except (json.JSONDecodeError, IOError, OSError):
                 pass
-
-    if not version:
-        for d in search_dirs:
-            ver_file = os.path.join(d, 'VERSION')
-            if os.path.isfile(ver_file):
-                try:
-                    v = Path(ver_file).read_text().strip()
-                    if v:
-                        version = v
-                        break
-                except (IOError, OSError):
-                    pass
 
     if not name:
         try:
