@@ -85,13 +85,17 @@ _run_cov_file() {
     name="$(basename "$f")"
     printf '  %s ... ' "$name"
 
-    # Run test with xtrace: stderr → trace file, stdout → capture
+    # Run test with xtrace: traces → fd 3 (trace file), stderr → /dev/null.
+    # Using BASH_XTRACEFD keeps traces off fd 2, so assert.sh's run() helper
+    # (which does 2>&1) cannot capture PS4 lines into $output.
     local out
     out=$(bash -c "
+        exec 3>>'$_cov_trace'
+        BASH_XTRACEFD=3
         PS4='+\${BASH_SOURCE:-?}:\${LINENO} '
         set -x
         source \"$f\"
-    " 2>>"$_cov_trace")
+    " 2>/dev/null)
     local rc=$?
 
     if (( rc == 0 )); then
