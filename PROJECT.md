@@ -184,9 +184,33 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-24 (session 12)_
+_Last updated: 2026-03-24 (session 13)_
 
-**469/469 tests pass. On v1.1.1.**
+**469/469 tests pass. Released v1.2.0.**
+
+Completed 2026-03-24 (session 13 — coverage improvement + v1.2.0 release):
+
+- Added `_main()` guard to `run.sh` so it can be sourced for unit testing without executing (main guard pattern).
+- Created `self-tests/unit/test-run-internals.sh`: 40 assertions covering `_xml_escape`, `_ptyunit_now`, `_main` arg validation, `_emit_tap`, `_emit_junit`, `_run_suite`, and `_main` dispatch paths. `run.sh` coverage: 0% → 67%.
+- Created `self-tests/unit/test-bench-mathlib.sh`: 35 assertions, `mathlib.sh` at 100%.
+- Created `self-tests/unit/test-bench-configlib.sh`: 36 assertions, `configlib.sh` at 93%.
+- Created `self-tests/unit/test-bench-fslib.sh`: 30 assertions, `fslib.sh` at 100%.
+- Created `self-tests/unit/test-bench-strlib.sh`: 41 assertions, `strlib.sh` at 96%.
+- Merged `feat/coverage-report-v2`: HTML report with folder hierarchy, sort, deltas, bash syntax highlighting, color-coded coverage %, skips test files in source scan.
+- Fixed `_xml_escape` for bash 5.3: `&` in `${var//pat/rep}` now means "matched text" — updated all replacements to use `\&`.
+- Overall coverage: 36% → 56%.
+- Released v1.2.0 (tagged + pushed).
+
+**Downstream actions needed (flag for PM):**
+- Submodule bump needed in: shellframe, shellql, seed (pick up v1.2.0)
+
+**Next steps:**
+1. Fix `release.sh` to update `package.json` version (XS) — was stale this release too
+2. Update `fissible/shellframe` submodule pointer + Homebrew upgrade
+3. CI workflow (GitHub Actions) for ptyunit itself
+4. Optional: trailing-incomplete-sequence mitigation (ticket stub in #18)
+
+---
 
 Completed 2026-03-24 (session 12 — ANSI stripping bug fix):
 
