@@ -135,7 +135,11 @@ class PTYSession:
         except OSError:
             pass
 
-        self.wait_for_stable()
+        try:
+            self.wait_for_stable()
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
         return self
 
     def __exit__(self, *args) -> None:
