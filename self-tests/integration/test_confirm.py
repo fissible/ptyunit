@@ -27,3 +27,17 @@ def test_right_then_enter_cancels():
         session.send("ENTER")
         # ENTER on "No" causes confirm.sh to exit — exit_code set by send()
         assert session.exit_code == 0
+
+
+def test_stdout_contains_result_after_confirm():
+    with PTYSession(SCRIPT) as session:
+        session.send("ENTER")  # ENTER on "Yes" → confirm.sh prints "Confirmed"
+    assert "Confirmed" in session.stdout
+
+
+def test_stdout_is_ansi_stripped():
+    with PTYSession(SCRIPT) as session:
+        pass
+    import re
+    ansi_re = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    assert not ansi_re.search(session.stdout)
