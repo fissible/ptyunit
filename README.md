@@ -518,6 +518,21 @@ scripts/
 examples/
 ```
 
+To exclude specific lines or blocks that are structurally untestable (e.g. error handlers that require infrastructure failure, or assertion failure branches only reachable via subshells), annotate with `# @pty_skip`:
+
+```bash
+# Single-line skip (inline on a code line):
+mkdir -p "$dir" || return 1  # @pty_skip
+
+# Block skip (standalone comment — skips until the next block-closer at
+# the same or lower indent: fi / done / esac / } / ) / ;;):
+if (( count == 0 )); then
+    # @pty_skip — only reachable when assertion fails; tested via subshells
+    printf 'FAIL\n'
+    ...
+fi
+```
+
 > **How it works:** Each test file runs with `set -x` and a custom `PS4` that logs `file:line` to a trace file. A Python script then cross-references the trace against your source files. Works on bash 3.2 — no special tools needed.
 
 ---
