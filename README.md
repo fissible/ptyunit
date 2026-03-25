@@ -325,8 +325,8 @@ Failed files:
 
 | Flag | What it does |
 |------|--------------|
-| `--unit` | Unit tests only (`tests/unit/test-*.sh`) |
-| `--integration` | Integration tests only (`tests/integration/test-*.sh`) |
+| `--unit` | Unit tests only (`test-*.sh` + `test_*.py`) |
+| `--integration` | Integration tests only (`test-*.sh` + `test_*.py`) |
 | `--all` | Both (default) |
 | `--jobs N` | Max parallel test files (default: number of CPU cores) |
 | `--filter PATTERN` | Only run files whose name contains PATTERN |

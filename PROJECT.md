@@ -49,7 +49,7 @@ independent layers that work together or standalone:
 
 ## Current state
 
-**Self-tests:** 221/221 assertions across 13 unit + 2 integration files (231 total).
+**Self-tests:** 523/523 assertions across 23 bash unit + 3 bash integration + 1 Python unit + 1 Python integration files (27 total, 1 skip).
 
 **Core files:**
 
@@ -57,8 +57,9 @@ independent layers that work together or standalone:
 |------|-------|---------|
 | `assert.sh` | ~400 | Assertion library + lifecycle + describe/params |
 | `mock.sh` | ~230 | Mocking and stubbing |
-| `run.sh` | ~380 | Test runner with TAP/JUnit/pretty output |
-| `pty_run.py` | ~160 | PTY driver |
+| `run.sh` | ~840 | Test runner with TAP/JUnit/pretty output; discovers test-*.sh + test_*.py |
+| `pty_run.py` | ~160 | PTY driver (legacy) |
+| `pty_session.py` | ~180 | PTY screen inspection engine (pyte-based, Screen + PTYSession) |
 | `coverage.sh` | ~165 | Coverage orchestrator |
 | `coverage_report.py` | ~335 | Coverage report generator (timestamped html + index nav) |
 
@@ -184,9 +185,24 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-25 (session 20)_
+_Last updated: 2026-03-25 (session 21)_
 
 **523/523 tests pass (507 bash + 16 Python). v1.4.0 current.**
+
+Completed 2026-03-25 (session 21 — run.sh Python test discovery):
+
+- Implemented [#21](https://github.com/fissible/ptyunit/issues/21) — `run.sh` now discovers and runs `test_*.py` files alongside `test-*.sh` in unit and integration directories.
+- Added `_run_py_job()` (runs one pytest file, parses `N passed`/`M failed` from summary) and `_run_py_suite()` (streaming parallel pool, same fd-semaphore design as `_run_suite`).
+- Python tests respect `--jobs`, `--fail-fast` (→ pytest `--exitfirst`), `--filter`, `--format tap|junit|pretty`, `--verbose`.
+- TAP and JUnit output include Python test file results via shared `_suite_work_dirs` mechanism.
+- Issue #21 closed.
+
+**Downstream actions needed (flag for PM):**
+- Submodule bump needed in: shellframe, shellql, seed (pick up v1.4.0 — unchanged from prior sessions; pty_session.py is a new optional file, no breaking changes)
+
+**Next steps:**
+1. run.sh coverage improvement (71%, 105 missed lines) — next major opportunity
+2. Submodule bumps: shellframe, shellql, seed (v1.4.0 + pick up confirm.sh fix)
 
 Completed 2026-03-25 (session 20 — pty_session.py implementation):
 
@@ -198,10 +214,9 @@ Completed 2026-03-25 (session 20 — pty_session.py implementation):
 
 **Downstream actions needed (flag for PM):**
 - Submodule bump needed in: shellframe, shellql, seed (pick up v1.4.0 — unchanged from prior session; pty_session.py is a new optional file, no breaking changes)
-- Open new XS issue: `run.sh` `.py` test discovery — sequence now that first `.py` tests exist
 
-**Next steps:**
-1. Open XS ticket: `run.sh` `.py` test discovery (output format now known from pytest output)
+**Next steps (as of session 20 close):**
+1. ~~Open XS ticket: `run.sh` `.py` test discovery~~ → done (issue #21, session 21)
 2. run.sh coverage improvement (71%, 105 missed lines) — next major opportunity
 3. Submodule bumps: shellframe, shellql, seed (v1.4.0 + pick up confirm.sh fix)
 
