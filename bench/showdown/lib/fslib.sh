@@ -23,5 +23,5 @@ fs_find_ext()    {
         [[ -f "$f" ]] && printf '%s\n' "${f##*/}"
     done
 }
-fs_tmpfile()     { mktemp "${TMPDIR%/}/fslib.XXXXXX"; }
-fs_tmpdir()      { mktemp -d "${TMPDIR%/}/fslib.XXXXXX"; }
+fs_tmpfile()     { local _b="${TMPDIR:-/tmp}"; mktemp "${_b%/}/fslib.XXXXXX"; }
+fs_tmpdir()      { local _b="${TMPDIR:-/tmp}"; mktemp -d "${_b%/}/fslib.XXXXXX"; }
