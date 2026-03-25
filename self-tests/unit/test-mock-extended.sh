@@ -96,6 +96,18 @@ describe "mock output vs exit-only paths"
     result=$(mock_args ptyunit_test_cmd 2)
     assert_eq "second_call" "$result"
 
+    test_that "mock_args without call number retrieves last call"
+    ptyunit_mock ptyunit_test_cmd --output ok
+    ptyunit_test_cmd first_call >/dev/null
+    ptyunit_test_cmd last_call >/dev/null
+    result=$(mock_args ptyunit_test_cmd)
+    assert_eq "last_call" "$result"
+
+    test_that "extra positional arg after flags is silently ignored"
+    ptyunit_mock ptyunit_test_cmd --output hello extra_ignored
+    result=$(ptyunit_test_cmd)
+    assert_eq "hello" "$result"
+
     test_that "function mock with no body and no output exits 0 silently"
     ptyunit_mock _ext_fn_b
     result=$(_ext_fn_b 2>/dev/null)

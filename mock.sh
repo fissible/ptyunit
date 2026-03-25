@@ -38,10 +38,12 @@ _PTYUNIT_MOCK_DIR=""
 _ptyunit_mock_init() {
     if [[ -z "$_PTYUNIT_MOCK_DIR" ]]; then
         _PTYUNIT_MOCK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/ptyunit-mock.XXXXXX") || {
+            # @pty_skip — mktemp failure; infrastructure error path, not testable inline
             printf 'ptyunit: mktemp failed for mock directory\n' >&2
             return 1
         }
         mkdir -p "$_PTYUNIT_MOCK_DIR/bin" "$_PTYUNIT_MOCK_DIR/state" || {
+            # @pty_skip — mkdir failure; infrastructure error path, not testable inline
             printf 'ptyunit: failed to create mock directories\n' >&2
             rm -rf "$_PTYUNIT_MOCK_DIR"
             _PTYUNIT_MOCK_DIR=""
@@ -196,7 +198,7 @@ _ptyunit_mock_cleanup_all() {
     if [[ -f "$_PTYUNIT_MOCK_DIR/registry" ]]; then
         while IFS= read -r _name; do
             [[ -n "$_name" ]] && ptyunit_unmock "$_name"
-        done < "$_PTYUNIT_MOCK_DIR/registry"
+        done < "$_PTYUNIT_MOCK_DIR/registry"  # @pty_skip
     fi
 
     # Restore original PATH
@@ -248,6 +250,7 @@ assert_called() {
     if (( count > 0 )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip — only reachable when assertion fails; tested via bash -c subshells
         (( _PTYUNIT_TEST_FAIL++ )) || true
         printf 'FAIL'
         [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
@@ -265,6 +268,7 @@ assert_not_called() {
     if (( count == 0 )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip — only reachable when assertion fails; tested via bash -c subshells
         (( _PTYUNIT_TEST_FAIL++ )) || true
         printf 'FAIL'
         [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
@@ -282,6 +286,7 @@ assert_called_times() {
     if (( count == expected )); then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip — only reachable when assertion fails; tested via bash -c subshells
         (( _PTYUNIT_TEST_FAIL++ )) || true
         printf 'FAIL'
         [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
@@ -300,6 +305,7 @@ assert_called_with() {
     count=$(mock_call_count "$name")
 
     if (( count == 0 )); then
+        # @pty_skip — only reachable when assertion fails; tested via bash -c subshells
         (( _PTYUNIT_TEST_FAIL++ )) || true
         printf 'FAIL'
         [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
@@ -313,6 +319,7 @@ assert_called_with() {
     if [[ "$actual" == "$expected" ]]; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
+        # @pty_skip — only reachable when assertion fails; tested via bash -c subshells
         (( _PTYUNIT_TEST_FAIL++ )) || true
         printf 'FAIL'
         [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"

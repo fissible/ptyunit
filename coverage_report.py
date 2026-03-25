@@ -166,6 +166,8 @@ _TEST_DIRS = frozenset({'tests', 'test', 'self-tests', 'self_tests', 'spec', 'sp
 #   Inline:              some code  # @pty_skip → excludes just that one line
 _NOCOVER_PRAGMA = re.compile(r'#\s*@pty_skip\b')
 _BLOCK_CLOSERS = frozenset({'fi', 'done', 'esac', ';;', ')', '}'})
+# Matches the terminator word in a heredoc opener: << WORD, <<'WORD', <<- WORD, etc.
+_HEREDOC_RE = re.compile(r'<<-?\s*[\'"]?([A-Za-z_][A-Za-z0-9_]*)[\'"]?\s*$')
 
 
 def _load_coverageignore(src_dir: str) -> list:
@@ -222,13 +224,20 @@ def count_source_lines(filepath: str) -> dict:
       Inline on code line → single-line skip: excludes only that line.
     """
     executable = {}
-    skip_indent = None  # set to indent level when inside a @pty_skip block
+    skip_indent = None       # set to indent level when inside a @pty_skip block
+    heredoc_end = None       # set to terminator word when inside a heredoc
     try:
         with open(filepath, 'r', errors='replace') as f:
             for i, line in enumerate(f, 1):
                 stripped = line.strip()
                 if not stripped:
                     continue
+
+                # ── Heredoc content: skip until terminator ────────────────
+                if heredoc_end is not None:
+                    if line.rstrip('\n') == heredoc_end or line.strip() == heredoc_end:
+                        heredoc_end = None
+                    continue  # skip content and terminator lines
 
                 indent = len(line) - len(line.lstrip())
 
@@ -254,6 +263,11 @@ def count_source_lines(filepath: str) -> dict:
                 # ── Inline @pty_skip pragma on a code line ────────────────
                 if _NOCOVER_PRAGMA.search(line):
                     continue
+
+                # ── Detect heredoc opener ─────────────────────────────────
+                m = _HEREDOC_RE.search(stripped)
+                if m:
+                    heredoc_end = m.group(1)
 
                 executable[i] = stripped
     except (IOError, OSError):
