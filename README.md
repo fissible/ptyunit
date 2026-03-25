@@ -509,7 +509,9 @@ TOTAL                         269    181     88    67%
 | `--report=html` | Timestamped HTML report in `coverage/`; `coverage/index.html` is a scrollable nav that links all runs |
 | `--min=N` | Fail if coverage is below N% (for CI gates) |
 
-To exclude files or directories from measurement (e.g. release scripts, examples), create a `.coverageignore` file at your project root:
+**PTY integration tests contribute to coverage automatically.** When `coverage.sh` runs your integration tests, it sets `PTYUNIT_COVERAGE_FILE` in the environment. Any test that calls `pty_run.py` will instrument the child bash process and trace its execution to the same coverage file — so TUI scripts exercised by PTY tests appear in the coverage report with no extra configuration. This requires bash 4.1+ in the child (for `BASH_XTRACEFD`).
+
+To exclude files or directories from measurement (e.g. release scripts), create a `.coverageignore` file at your project root:
 
 ```
 # .coverageignore — one glob pattern per line

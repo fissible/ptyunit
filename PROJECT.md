@@ -184,26 +184,20 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-25 (session 16)_
+_Last updated: 2026-03-25 (session 17)_
 
-**477/477 tests pass. Released v1.3.0. Submodules bumped in shellframe, shellql, seed.**
+**507/507 tests pass. v1.3.0 current.**
 
-Completed 2026-03-25 (session 16 — mock.sh 100% coverage + v1.3.0 release):
+Completed 2026-03-25 (session 17 — PTY child coverage instrumentation):
 
-- Added heredoc detection to `coverage_report.py` `count_source_lines()`: lines between `<< WORD` and `WORD` terminator are no longer counted as executable (they run in a subprocess, never traced inline). Also added `_HEREDOC_RE` constant.
-- Added `# @pty_skip` block pragmas to all unreachable branches in `mock.sh`: 2 infrastructure error handlers (mktemp/mkdir failure), and all 5 mock assertion failure `else`/`if` blocks. mock.sh is now at **100%**.
-- Added 2 new tests to `test-mock-extended.sh`: `mock_args` without explicit N (retrieves last call), and extra positional arg after flags (exercises `*)` break branch in ptyunit_mock's option parser).
-- Released **v1.3.0** (`bash release.sh minor`) and pushed. Submodule bumps in shellframe, shellql, seed completed by PM.
-- Total coverage: **83% (559/672)** — assert.sh 96%, mock.sh 100%, run.sh 71%.
+- Added `PTYUNIT_COVERAGE_FILE` env var support to `pty_run.py`: when set, a temp `BASH_ENV` startup script is injected into the child bash process before `execvp`, enabling PS4 xtrace to the shared trace file (fd 9, append mode, bash 4.1+ required). `coverage.sh` now exports `PTYUNIT_COVERAGE_FILE=$_cov_trace` so PTY-driven integration tests contribute to the coverage metric automatically.
+- Removed `examples` from `.coverageignore` — example scripts are now traceable via PTY child instrumentation. `examples/confirm.sh` and `examples/menu.sh` both land at **89%** from existing integration tests.
+- Total coverage: **84% (649/773)** — assert.sh 96%, mock.sh 100%, run.sh 71%, examples/confirm.sh 89%, examples/menu.sh 89%.
+- Updated README coverage section to document PTY integration test coverage.
 
 **Next steps:**
 1. CI workflow (GitHub Actions) for ptyunit itself
 2. run.sh coverage improvement (71%, 105 missed lines) — next major opportunity
-3. Optional: trailing-incomplete-sequence mitigation (ticket stub in #18)
-
-**Next steps:**
-1. CI workflow (GitHub Actions) for ptyunit itself
-2. Update `fissible/shellframe` submodule pointer + Homebrew upgrade
 3. Optional: trailing-incomplete-sequence mitigation (ticket stub in #18)
 
 ---
