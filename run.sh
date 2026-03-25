@@ -89,12 +89,14 @@ _ptyunit_now() {
 
 # ── XML escaping helper for JUnit output ─────────────────────────────────────
 _xml_escape() {
-    local s="$1"
-    s="${s//&/\&amp;}"
-    s="${s//</\&lt;}"
-    s="${s//>/\&gt;}"
-    s="${s//\"/\&quot;}"
-    printf '%s' "$s"
+    # bash ${//} replacement semantics for & changed in 5.0 and again in 5.2,
+    # making any single form wrong on at least one version. sed \& is POSIX and
+    # stable: \& is always a literal &, & is always the matched text.
+    printf '%s' "$1" | sed \
+        -e 's/&/\&amp;/g' \
+        -e 's/</\&lt;/g' \
+        -e 's/>/\&gt;/g' \
+        -e 's/"/\&quot;/g'
 }
 
 # ── Worker: run one test file, write results to work_dir ─────────────────────
