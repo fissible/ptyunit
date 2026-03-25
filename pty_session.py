@@ -221,6 +221,19 @@ class PTYSession:
             if self._eof:
                 break  # child closed slave — no more output coming
 
+    def send(self, key: str) -> None:
+        """Send one keystroke, wait for screen stability, then check child exit status.
+
+        Sets self._exit_code if the child exited during or after the keystroke.
+        This ensures exit_code is correct when a key causes the script to exit
+        (e.g. ENTER on a confirm dialog).
+        """
+        os.write(self._master_fd, parse_key(key))
+        self.wait_for_stable()
+        result = os.waitpid(self._pid, os.WNOHANG)
+        if result[0] != 0:
+            self._exit_code = os.waitstatus_to_exitcode(result[1])
+
     @property
     def screen(self) -> Screen:
         """Current stable screen state as a Screen wrapper."""

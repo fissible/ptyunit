@@ -41,7 +41,7 @@ _draw() {
     if (( _selected == 0 )); then
         _tui $'\033[7m[ Yes ]\033[0m   No  '
     else
-        _tui '  Yes    \033[7m[ No  ]\033[0m'
+        _tui $'  Yes    \033[7m[ No ]\033[0m'
     fi
 }
 
