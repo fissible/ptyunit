@@ -184,21 +184,27 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-25 (session 17)_
+_Last updated: 2026-03-25 (session 18)_
 
-**507/507 tests pass. v1.3.0 current.**
+**507/507 tests pass. v1.4.0 current.**
 
-Completed 2026-03-25 (session 17 — PTY child coverage instrumentation):
+Completed 2026-03-25 (session 18 — CI bug fixes + release + PTYSession design):
 
-- Added `PTYUNIT_COVERAGE_FILE` env var support to `pty_run.py`: when set, a temp `BASH_ENV` startup script is injected into the child bash process before `execvp`, enabling PS4 xtrace to the shared trace file (fd 9, append mode, bash 4.1+ required). `coverage.sh` now exports `PTYUNIT_COVERAGE_FILE=$_cov_trace` so PTY-driven integration tests contribute to the coverage metric automatically.
-- Removed `examples` from `.coverageignore` — example scripts are now traceable via PTY child instrumentation. `examples/confirm.sh` and `examples/menu.sh` both land at **89%** from existing integration tests.
-- Total coverage: **84% (649/773)** — assert.sh 96%, mock.sh 100%, run.sh 71%, examples/confirm.sh 89%, examples/menu.sh 89%.
-- Updated README coverage section to document PTY integration test coverage.
+- Merged PR #19 (`fix/xml-escape-bash-compat`): two CI bug fixes:
+  - `_xml_escape` in `run.sh`: replaced bash `${//}` substitutions with `sed -e` chains; bash 5.0/5.2 broke `\&` and `&` semantics in different directions — sed's `\&` is POSIX-stable.
+  - `fs_tmpfile`/`fs_tmpdir` in `bench/showdown/lib/fslib.sh`: guarded against unbound `TMPDIR` under `set -u` and trailing slash on macOS.
+- Released **v1.4.0** (minor — includes feat: PTY child coverage instrumentation from session 17).
+- Designed and spec'd `pty_session.py` — PTY screen inspection engine using pyte as terminal emulator. Spec at `docs/superpowers/specs/2026-03-25-ptyunit-pyte-engine-design.md`, status: **Approved**.
+- Filed [#20](https://github.com/fissible/ptyunit/issues/20) — implementation ticket for `pty_session.py` + `PTYSession`.
+
+**Downstream actions needed (flag for PM):**
+- Submodule bump needed in: shellframe, shellql, seed (pick up v1.4.0)
 
 **Next steps:**
-1. CI workflow (GitHub Actions) for ptyunit itself
-2. run.sh coverage improvement (71%, 105 missed lines) — next major opportunity
-3. Optional: trailing-incomplete-sequence mitigation (ticket stub in #18)
+1. Implement `pty_session.py` per approved spec — issue [#20](https://github.com/fissible/ptyunit/issues/20), effort S (1–2h)
+2. After first `.py` test exists: add `run.sh` `.py` test discovery (separate XS issue)
+3. run.sh coverage improvement (71%, 105 missed lines) — next major opportunity
+4. Optional: trailing-incomplete-sequence mitigation (ticket stub in #18)
 
 ---
 
