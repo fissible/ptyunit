@@ -22,6 +22,39 @@
 
 ---
 
+## Out of Scope
+
+- `run.sh` `.py` test discovery — separate XS issue, sequenced after the first real `.py` test exists
+- Snapshot history / screen diffs — additive later if needed
+- Coverage integration via `BASH_XTRACEFD` routing — separate concern
+- `resize(cols, rows)` mid-session — SIGWINCH delivery + redraw not synchronized with `wait_for_stable()`
+- Detecting animation-complete vs. quiescent — no pyte signal for this; callers must use `TimeoutError` as the sample trigger
+
+---
+
+## Implementation Notes
+
+### Partial ANSI sequences
+`pyte.ByteStream` buffers incomplete escape sequences internally and only advances the screen on complete sequences. `_read_available` does **not** need to handle split reads — feeding partial bytes to the stream on one call and the rest on the next is safe.
+
+### Default parameter rationale
+
+**`stable_window=0.05` (50ms):** A reasonable lower bound for most interactive TUI render cycles. Most TUIs flush a complete frame within one event loop tick (~1–16ms), so 50ms catches burst-pause-burst renders with margin. It is a *heuristic*, not a guarantee.
+
+When to increase `stable_window`:
+- **Slow CI environments** (high load, slow I/O): try 100–200ms if tests flap.
+- **Animation-heavy TUIs** that redraw continuously: a TUI with a spinner that redraws every 50ms will never stabilize within a 50ms window. Either poll for a specific frame via `find_row()` or accept `TimeoutError` as the signal to sample the screen.
+
+**`timeout=10.0` (10 seconds):** The outer hard deadline. Guards against programs that produce continuous output and never reach quiescence. 10s is generous for interactive test scripts; reduce to 2–3s for fast unit-style PTY tests.
+
+### Known unhandled edge cases (out of scope for v1)
+
+- **Programs that never stabilize** (continuous redraws, spinners, `watch`-style loops): `wait_for_stable()` runs until `hard_deadline` and raises `TimeoutError`. This is correct — there is no smarter signal from pyte.
+- **Resize events mid-session:** `PTYSession` does not expose `resize(cols, rows)`. Sending `TIOCSWINSZ` mid-session is possible but SIGWINCH delivery and subsequent redraw are not synchronized with `wait_for_stable()`.
+- **Long-running animations between stable states:** `send("KEY")` waits for quiescence after each keystroke. If a keystroke triggers a 2-second animation before the final frame, `wait_for_stable()` correctly waits (up to `timeout`). Increase `timeout` for these cases.
+
+---
+
 ## Internal Structure of `pty_session.py`
 
 ```
