@@ -184,9 +184,15 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-25 (session 18)_
+_Last updated: 2026-03-25 (session 19)_
 
 **507/507 tests pass. v1.4.0 current.**
+
+Completed 2026-03-25 (session 19 — post-release housekeeping + implementation plan):
+
+- Generated implementation plan for [#20](https://github.com/fissible/ptyunit/issues/20) via `writing-plans` — at `docs/superpowers/plans/2026-03-25-pty-session-engine.md`.
+- Closed rubber-ducky room `ptyunit-pyte-engine` — design phase complete, Allen approved.
+- Added `.claude/` and `*.json-e` to `.gitignore`.
 
 Completed 2026-03-25 (session 18 — CI bug fixes + release + PTYSession design):
 
@@ -201,7 +207,7 @@ Completed 2026-03-25 (session 18 — CI bug fixes + release + PTYSession design)
 - Submodule bump needed in: shellframe, shellql, seed (pick up v1.4.0)
 
 **Next steps:**
-1. Implement `pty_session.py` per approved spec — issue [#20](https://github.com/fissible/ptyunit/issues/20), effort S (1–2h)
+1. Implement `pty_session.py` per approved spec and plan — issue [#20](https://github.com/fissible/ptyunit/issues/20), effort S (1–2h), plan at `docs/superpowers/plans/2026-03-25-pty-session-engine.md`
 2. After first `.py` test exists: add `run.sh` `.py` test discovery (separate XS issue)
 3. run.sh coverage improvement (71%, 105 missed lines) — next major opportunity
 4. Optional: trailing-incomplete-sequence mitigation (ticket stub in #18)
