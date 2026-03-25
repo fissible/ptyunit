@@ -184,21 +184,21 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-25 (session 17)_
+_Last updated: 2026-03-25 (session 18)_
 
-**507/507 tests pass. v1.3.0 current.**
+**507/507 tests pass. v1.3.0 current. PR #19 open (CI bug fixes).**
 
-Completed 2026-03-25 (session 17 — PTY child coverage instrumentation):
+Completed 2026-03-25 (session 18 — CI bug fixes on PR #19):
 
-- Added `PTYUNIT_COVERAGE_FILE` env var support to `pty_run.py`: when set, a temp `BASH_ENV` startup script is injected into the child bash process before `execvp`, enabling PS4 xtrace to the shared trace file (fd 9, append mode, bash 4.1+ required). `coverage.sh` now exports `PTYUNIT_COVERAGE_FILE=$_cov_trace` so PTY-driven integration tests contribute to the coverage metric automatically.
-- Removed `examples` from `.coverageignore` — example scripts are now traceable via PTY child instrumentation. `examples/confirm.sh` and `examples/menu.sh` both land at **89%** from existing integration tests.
-- Total coverage: **84% (649/773)** — assert.sh 96%, mock.sh 100%, run.sh 71%, examples/confirm.sh 89%, examples/menu.sh 89%.
-- Updated README coverage section to document PTY integration test coverage.
+- Fixed `_xml_escape` in `run.sh`: bash 5.0 made `\&` literal (breaking `\&amp;` → produced `\&amp;`); bash 5.2 added `&` as matched-text backreference (breaking `&amp;` for non-`&` patterns). Replaced `${//}` with `sed -e` chains — `\&` is POSIX-stable across all sed implementations.
+- Fixed `fslib.sh` `fs_tmpfile`/`fs_tmpdir`: `${TMPDIR%/}` errored under `set -u` when `TMPDIR` unset (CI on Ubuntu). New form: `local _b="${TMPDIR:-/tmp}"; ... "${_b%/}/..."` — handles both unset and trailing-slash cases.
+- PR #19: https://github.com/fissible/ptyunit/pull/19
 
 **Next steps:**
-1. CI workflow (GitHub Actions) for ptyunit itself
-2. run.sh coverage improvement (71%, 105 missed lines) — next major opportunity
-3. Optional: trailing-incomplete-sequence mitigation (ticket stub in #18)
+1. Merge PR #19 once CI is green
+2. After merge: cut patch release (v1.3.1) — these are bug fixes
+3. run.sh coverage improvement (71%, 105 missed lines) — next major opportunity
+4. PTYSession / pyte integration — design decisions recorded in session 18 conversation (issue to be filed)
 
 ---
 
