@@ -60,6 +60,7 @@ fi
 
 _cov_trace=$(mktemp "${TMPDIR:-/tmp}/ptyunit-coverage.XXXXXX")
 trap "rm -f '$_cov_trace'" EXIT
+export PTYUNIT_COVERAGE_FILE="$_cov_trace"
 
 printf 'ptyunit coverage\n'
 printf '  source: %s\n' "$_cov_src"

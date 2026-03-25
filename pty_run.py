@@ -29,6 +29,13 @@ Options (set via env vars):
                     stdout is redirected or you are certain the output will not
                     reach a live terminal.
 
+Coverage instrumentation (set by ptyunit's coverage.sh):
+    PTYUNIT_COVERAGE_FILE=<path>   When set, pty_run.py injects a BASH_ENV
+                    startup script into the child bash process that enables
+                    PS4 xtrace to the given trace file (fd 9, append mode).
+                    Requires bash 4.1+ (BASH_XTRACEFD). The child must not
+                    already use fd 9 for another purpose.
+
 Exit code: the script's own exit code (or 124 on timeout).
 """
 
@@ -39,6 +46,7 @@ import re
 import select
 import struct
 import sys
+import tempfile
 import termios
 import time
 
@@ -109,101 +117,128 @@ def run(
     cols: int = 80,
     rows: int = 24,
     raw: bool = False,
+    coverage_file: str = None,
 ) -> tuple:
     """Run *script* in a PTY with proper controlling terminal.
 
     Returns (stripped_output, exit_code).
     """
-    # pty.fork() creates a PTY pair and forks.
-    # The child automatically gets the slave as its controlling terminal,
-    # so /dev/tty works correctly inside TUI scripts.
-    pid, master = pty.fork()
+    # If coverage instrumentation is requested, write a BASH_ENV startup script
+    # that enables PS4 xtrace to the shared trace file before the child runs.
+    # BASH_ENV is sourced by bash for every non-interactive shell invocation
+    # (i.e. "bash script.sh"), which is exactly what pty.fork() + execvp produces.
+    _bash_env = None
+    if coverage_file:
+        fd, _bash_env = tempfile.mkstemp(suffix='.sh')
+        with os.fdopen(fd, 'w') as f:
+            f.write(
+                f'exec 9>>"{coverage_file}"\n'
+                'export BASH_XTRACEFD=9\n'
+                "PS4='+${BASH_SOURCE:-?}:${LINENO} '\n"
+                'export PS4\n'
+                'set -x\n'
+            )
 
-    if pid == 0:
-        # ── Child ────────────────────────────────────────────────────
-        # Set terminal size
+    try:
+        # pty.fork() creates a PTY pair and forks.
+        # The child automatically gets the slave as its controlling terminal,
+        # so /dev/tty works correctly inside TUI scripts.
+        pid, master = pty.fork()
+
+        if pid == 0:
+            # ── Child ────────────────────────────────────────────────────
+            # Set terminal size
+            winsize = struct.pack("HHHH", rows, cols, 0, 0)
+            try:
+                fcntl.ioctl(pty.STDOUT_FILENO, termios.TIOCSWINSZ, winsize)
+            except OSError:
+                pass
+            if _bash_env:
+                os.environ["BASH_ENV"] = _bash_env
+            os.execvp("bash", ["bash", script])
+            # execvp replaces the process; this line is unreachable
+            os._exit(1)
+
+        # ── Parent ───────────────────────────────────────────────────────
+        # Set terminal size on master side too
         winsize = struct.pack("HHHH", rows, cols, 0, 0)
         try:
-            fcntl.ioctl(pty.STDOUT_FILENO, termios.TIOCSWINSZ, winsize)
+            fcntl.ioctl(master, termios.TIOCSWINSZ, winsize)
         except OSError:
             pass
-        os.execvp("bash", ["bash", script])
-        # execvp replaces the process; this line is unreachable
-        os._exit(1)
 
-    # ── Parent ───────────────────────────────────────────────────────
-    # Set terminal size on master side too
-    winsize = struct.pack("HHHH", rows, cols, 0, 0)
-    try:
-        fcntl.ioctl(master, termios.TIOCSWINSZ, winsize)
-    except OSError:
-        pass
+        output = b""
 
-    output = b""
-
-    # Let the script start and render its initial UI
-    time.sleep(init_delay)
-    output += _drain(master)
-
-    # Send keystrokes one at a time
-    for key in keys:
-        # Check if child already exited
-        result = os.waitpid(pid, os.WNOHANG)
-        if result[0] != 0:
-            break
-        try:
-            os.write(master, parse_key(key))
-        except OSError:
-            break
-        time.sleep(key_delay)
+        # Let the script start and render its initial UI
+        time.sleep(init_delay)
         output += _drain(master)
 
-    # Wait for the child to exit (up to timeout)
-    deadline = time.time() + timeout
-    exit_code = None
-
-    while time.time() < deadline:
-        result = os.waitpid(pid, os.WNOHANG)
-        if result[0] != 0:
-            exit_code = os.waitstatus_to_exitcode(result[1])
-            break
-        r, _, _ = select.select([master], [], [], 0.1)
-        if r:
+        # Send keystrokes one at a time
+        for key in keys:
+            # Check if child already exited
+            result = os.waitpid(pid, os.WNOHANG)
+            if result[0] != 0:
+                break
             try:
-                chunk = os.read(master, 4096)
-                output += chunk
+                os.write(master, parse_key(key))
             except OSError:
-                # Child closed the slave (exited)
-                result = os.waitpid(pid, 0)
+                break
+            time.sleep(key_delay)
+            output += _drain(master)
+
+        # Wait for the child to exit (up to timeout)
+        deadline = time.time() + timeout
+        exit_code = None
+
+        while time.time() < deadline:
+            result = os.waitpid(pid, os.WNOHANG)
+            if result[0] != 0:
                 exit_code = os.waitstatus_to_exitcode(result[1])
                 break
+            r, _, _ = select.select([master], [], [], 0.1)
+            if r:
+                try:
+                    chunk = os.read(master, 4096)
+                    output += chunk
+                except OSError:
+                    # Child closed the slave (exited)
+                    result = os.waitpid(pid, 0)
+                    exit_code = os.waitstatus_to_exitcode(result[1])
+                    break
 
-    if exit_code is None:
-        # Timeout — kill the child
+        if exit_code is None:
+            # Timeout — kill the child
+            try:
+                os.kill(pid, 15)  # SIGTERM
+                time.sleep(0.5)
+                os.kill(pid, 9)   # SIGKILL
+            except OSError:
+                pass
+            os.waitpid(pid, 0)
+            exit_code = 124  # conventional timeout exit code
+
+        # Final drain
+        output += _drain(master, timeout=0.2)
+
         try:
-            os.kill(pid, 15)  # SIGTERM
-            time.sleep(0.5)
-            os.kill(pid, 9)   # SIGKILL
+            os.close(master)
         except OSError:
             pass
-        os.waitpid(pid, 0)
-        exit_code = 124  # conventional timeout exit code
 
-    # Final drain
-    output += _drain(master, timeout=0.2)
+        if raw:
+            result = output.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        else:
+            result = ANSI_RE.sub(b"", output)
+            result = result.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
 
-    try:
-        os.close(master)
-    except OSError:
-        pass
+        return result.decode("utf-8", errors="replace"), exit_code
 
-    if raw:
-        result = output.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-    else:
-        result = ANSI_RE.sub(b"", output)
-        result = result.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-
-    return result.decode("utf-8", errors="replace"), exit_code
+    finally:
+        if _bash_env:
+            try:
+                os.unlink(_bash_env)
+            except OSError:
+                pass
 
 
 def main():
@@ -214,15 +249,17 @@ def main():
     script = sys.argv[1]
     keys = sys.argv[2:]
 
-    cols   = int(os.environ.get("PTY_COLS",    80))
-    rows   = int(os.environ.get("PTY_ROWS",    24))
-    delay  = float(os.environ.get("PTY_DELAY", 0.15))
-    init   = float(os.environ.get("PTY_INIT",  0.30))
-    tmt    = float(os.environ.get("PTY_TIMEOUT", 10))
-    raw    = os.environ.get("PTY_RAW", "0") == "1"
+    cols     = int(os.environ.get("PTY_COLS",    80))
+    rows     = int(os.environ.get("PTY_ROWS",    24))
+    delay    = float(os.environ.get("PTY_DELAY", 0.15))
+    init     = float(os.environ.get("PTY_INIT",  0.30))
+    tmt      = float(os.environ.get("PTY_TIMEOUT", 10))
+    raw      = os.environ.get("PTY_RAW", "0") == "1"
+    cov_file = os.environ.get("PTYUNIT_COVERAGE_FILE") or None
 
     out, rc = run(script, keys, key_delay=delay, init_delay=init,
-                  timeout=tmt, cols=cols, rows=rows, raw=raw)
+                  timeout=tmt, cols=cols, rows=rows, raw=raw,
+                  coverage_file=cov_file)
     sys.stdout.write(out)
     sys.exit(rc)
 

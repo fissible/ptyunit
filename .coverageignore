@@ -12,5 +12,3 @@ bench
 # Docker test-matrix runners
 docker
 
-# Example scripts
-examples
