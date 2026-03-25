@@ -184,9 +184,26 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-25 (session 19)_
+_Last updated: 2026-03-25 (session 20)_
 
-**507/507 tests pass. v1.4.0 current.**
+**523/523 tests pass (507 bash + 16 Python). v1.4.0 current.**
+
+Completed 2026-03-25 (session 20 — pty_session.py implementation):
+
+- Implemented [#20](https://github.com/fissible/ptyunit/issues/20) — `pty_session.py` + `PTYSession` fully shipped and merged to `main`.
+- New files: `pty_session.py`, `requirements-screen.txt`, `conftest.py`, `self-tests/unit/test_screen.py`, `self-tests/integration/test_confirm.py`
+- Fixed `examples/confirm.sh`: `$'...'` quoting for ESC sequences (was silently rendering literal `\033`), and spacing symmetry `[ No  ]` → `[ No ]`
+- Notable bugs caught during review: `__enter__` cleanup guard (child orphan on `TimeoutError`), `waitpid` EOF race fix, ANSI_RE coverage gap in test
+- Implementation notes: `close(master_fd)` before `waitpid` in `__exit__` (macOS deadlock fix); blocking `waitpid` fallback in `send()` when `_eof` is True
+
+**Downstream actions needed (flag for PM):**
+- Submodule bump needed in: shellframe, shellql, seed (pick up v1.4.0 — unchanged from prior session; pty_session.py is a new optional file, no breaking changes)
+- Open new XS issue: `run.sh` `.py` test discovery — sequence now that first `.py` tests exist
+
+**Next steps:**
+1. Open XS ticket: `run.sh` `.py` test discovery (output format now known from pytest output)
+2. run.sh coverage improvement (71%, 105 missed lines) — next major opportunity
+3. Submodule bumps: shellframe, shellql, seed (v1.4.0 + pick up confirm.sh fix)
 
 Completed 2026-03-25 (session 19 — post-release housekeeping + implementation plan):
 
