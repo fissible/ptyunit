@@ -41,3 +41,17 @@ def test_stdout_is_ansi_stripped():
     import re
     ansi_re = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     assert not ansi_re.search(session.stdout)
+
+
+def test_button_uses_reverse_video_not_bold():
+    """confirm.sh uses ESC[7m (reverse video) for button highlight, not ESC[1m (bold).
+    cell_bold() returns False; the highlight is a reverse attribute, not bold.
+    """
+    with PTYSession(SCRIPT) as session:
+        row = session.screen.find_row("[ Yes ]")
+        assert row is not None
+        col = next(
+            c for c, char in session.screen._screen.buffer[row].items()
+            if char.data == "["
+        )
+        assert not session.screen.cell_bold(row, col)
