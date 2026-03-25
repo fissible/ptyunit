@@ -233,6 +233,14 @@ class PTYSession:
         result = os.waitpid(self._pid, os.WNOHANG)
         if result[0] != 0:
             self._exit_code = os.waitstatus_to_exitcode(result[1])
+        elif self._eof:
+            # EOF means child closed the slave — process exit is imminent.
+            # Block to catch it rather than leaving exit_code as None.
+            try:
+                result = os.waitpid(self._pid, 0)
+                self._exit_code = os.waitstatus_to_exitcode(result[1])
+            except OSError:
+                pass
 
     @property
     def screen(self) -> Screen:
