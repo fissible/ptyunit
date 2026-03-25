@@ -10,7 +10,9 @@
 #   - Run from any other directory → discovers <pwd>/tests/unit/ and <pwd>/tests/integration/
 #
 # Unit tests:        <tests>/unit/test-*.sh        (pure bash, no PTY)
+#                    <tests>/unit/test_*.py         (pytest, no PTY)
 # Integration tests: <tests>/integration/test-*.sh (require Python 3 + PTY)
+#                    <tests>/integration/test_*.py  (pytest, require PTY)
 #
 # Each test-*.sh should source assert.sh, run assertions, then call
 # ptyunit_test_summary at the end.
@@ -50,8 +52,8 @@ ptyunit $PTYUNIT_VERSION — bash test runner
 Usage: bash run.sh [options]
 
 Suites:
-  --unit              Unit tests only (tests/unit/test-*.sh)
-  --integration       Integration tests only (tests/integration/test-*.sh)
+  --unit              Unit tests only (test-*.sh + test_*.py)
+  --integration       Integration tests only (test-*.sh + test_*.py)
   --all               Both (default)
 
 Filtering:
@@ -215,6 +217,75 @@ _run_job() {
     rm -rf "$_test_tmpdir"
 }
 
+# ── Worker: run one Python test file via pytest ──────────────────────────────
+_run_py_job() {
+    local f="$1" work_dir="$2" _col="${3:-0}"
+    local name="${f##*/}"
+    local out_f="$work_dir/$name.out"
+    local res_f="$work_dir/$name.res"
+    local raw_f="$work_dir/$name.raw"
+
+    local _ff_args=()
+    (( _fail_fast )) && _ff_args=(--exitfirst)
+
+    local _t0 _t1 _elapsed _raw_elapsed
+    _t0=$(_ptyunit_now)
+    local out
+    out=$(python3 -m pytest "$f" -q --tb=short "${_ff_args[@]}" 2>&1)
+    local rc=$?
+    _t1=$(_ptyunit_now)
+
+    if [[ "${BASH_VERSINFO[0]}" -ge 5 ]]; then
+        local _s0="${_t0%.*}" _f0="${_t0#*.}" _s1="${_t1%.*}" _f1="${_t1#*.}"
+        _f0="${_f0}000000"; _f0="${_f0:0:6}"
+        _f1="${_f1}000000"; _f1="${_f1:0:6}"
+        local _us=$(( (_s1 * 1000000 + 10#$_f1) - (_s0 * 1000000 + 10#$_f0) ))
+        if (( _us < 0 )); then _us=0; fi
+        local _secs=$(( _us / 1000000 ))
+        local _tenths=$(( (_us / 100000) % 10 ))
+        _raw_elapsed="${_secs}.${_tenths}"
+    else
+        _raw_elapsed=$(( _t1 - _t0 ))
+        _raw_elapsed="${_raw_elapsed}.0"
+    fi
+    if [[ "$_raw_elapsed" == "0.0" ]]; then
+        _elapsed="< 0.1"
+    else
+        _elapsed="$_raw_elapsed"
+    fi
+
+    printf '%s\n' "$out" > "$raw_f"
+
+    # Parse pytest summary: "N passed" and "M failed" counts
+    local passed=0 failed=0 total=0
+    [[ "$out" =~ ([0-9]+)[[:space:]]passed ]] && passed="${BASH_REMATCH[1]}"
+    [[ "$out" =~ ([0-9]+)[[:space:]]failed ]] && failed="${BASH_REMATCH[1]}"
+    total=$(( passed + failed ))
+
+    printf '%d %d %d %s\n' "$rc" "$passed" "$total" "$_raw_elapsed" > "$res_f"
+
+    local _timing_str=""
+    local _int_elapsed="${_raw_elapsed%.*}"
+    if (( _verbose )) || (( _int_elapsed >= 1 )); then
+        _timing_str=" in $_elapsed secs"
+    fi
+
+    if (( rc == 0 )); then
+        printf '  %-*s ... %s (%d/%d)%s\n' \
+            "$_col" "$name" "$_OK_LABEL" "$passed" "$total" "$_timing_str" > "$out_f"
+    else
+        {
+            printf '  %-*s ... %s%s\n' "$_col" "$name" "$_FAIL_LABEL" "$_timing_str"
+            while IFS= read -r _line; do
+                printf '    %s\n' "$_line"
+            done <<< "$out"
+        } > "$out_f"
+        if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]]; then
+            touch "$_fail_sentinel"
+        fi
+    fi
+}
+
 # ── Suite runner: streaming worker pool ──────────────────────────────────────
 # Uses an fd-based semaphore for bash 3.2-compatible bounded parallelism.
 # Jobs start as soon as a slot opens — scanner and workers are interleaved.
@@ -320,6 +391,94 @@ _run_suite() {
     fi
 
     # Save or clean up work_dir
+    if [[ "$_format" != "pretty" ]]; then
+        _suite_work_dirs+=("$work_dir")
+        _suite_labels+=("$label")
+    else
+        rm -rf "$work_dir"
+    fi
+}
+
+# ── Python suite runner: discover test_*.py, run each via pytest ─────────────
+_run_py_suite() {
+    local suite_dir="$1" label="$2"
+
+    local files=()
+    local f
+    for f in "$suite_dir"/test_*.py; do
+        [ -f "$f" ] && files+=("$f")
+    done
+
+    if [[ -n "$_filter" ]] && (( ${#files[@]} > 0 )); then
+        local _filtered=()
+        for f in "${files[@]}"; do
+            local _n="${f##*/}"
+            if [[ "$_n" == *"$_filter"* ]]; then
+                _filtered+=("$f")
+            fi
+        done
+        files=("${_filtered[@]:-}")
+    fi
+
+    (( ${#files[@]} == 0 )) && return
+
+    local _col=0
+    for f in "${files[@]}"; do
+        local _n="${f##*/}"
+        (( ${#_n} > _col )) && _col=${#_n}
+    done
+
+    [[ "$_format" == "pretty" ]] && printf '\n%s tests:\n' "$label"
+
+    local work_dir
+    work_dir=$(mktemp -d) || { printf 'Error: mktemp failed\n' >&2; return 1; }
+
+    for f in "${files[@]}"; do
+        printf '%s\n' "$f"
+    done > "$work_dir/.file_list"
+
+    local _sem
+    _sem=$(mktemp -u)
+    mkfifo "$_sem"
+    exec 5<>"$_sem"
+    rm -f "$_sem"
+
+    local i
+    for (( i=0; i<_jobs; i++ )); do printf 'x' >&5; done
+
+    for f in "${files[@]}"; do
+        read -r -n1 -u5 _tok
+        if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
+            break
+        fi
+        (
+            _run_py_job "$f" "$work_dir" "$_col"
+            printf 'x' >&5
+        ) &
+    done
+
+    wait
+    exec 5>&-
+
+    for f in "${files[@]}"; do
+        local name="${f##*/}"
+        [[ "$_format" == "pretty" ]] && [[ -f "$work_dir/$name.out" ]] && cat "$work_dir/$name.out"
+        if [[ -f "$work_dir/$name.res" ]]; then
+            local rc passed total elapsed
+            read -r rc passed total elapsed < "$work_dir/$name.res"
+            (( _total_pass += passed )) || true
+            (( _total_fail += total - passed )) || true
+            (( _total_files++ )) || true
+            if (( rc != 0 )); then
+                _failed_files+=("$name")
+            fi
+        fi
+    done
+
+    if [[ "$_format" == "pretty" ]] && (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
+        printf '  [stopped: --fail-fast]\n'
+    fi
+
     if [[ "$_format" != "pretty" ]]; then
         _suite_work_dirs+=("$work_dir")
         _suite_labels+=("$label")
@@ -584,12 +743,18 @@ _main() {
     case "$_mode" in
         --unit)
             _run_suite "$TESTS_DIR/unit" "Unit"
+            if command -v python3 >/dev/null 2>&1; then
+                _run_py_suite "$TESTS_DIR/unit" "Python Unit"
+            else
+                [[ "$_format" == "pretty" ]] && printf '\nSkipping Python unit tests (python3 not found)\n'
+            fi
             ;;
         --integration)
             if ! command -v python3 >/dev/null 2>&1; then
                 [[ "$_format" == "pretty" ]] && printf '\nSkipping integration tests (python3 not found)\n'
             else
                 _run_suite "$TESTS_DIR/integration" "Integration"
+                _run_py_suite "$TESTS_DIR/integration" "Python Integration"
             fi
             ;;
         --all)
@@ -599,7 +764,23 @@ _main() {
             fi
             if (( ! _fail_fast_triggered )); then
                 if command -v python3 >/dev/null 2>&1; then
+                    _run_py_suite "$TESTS_DIR/unit" "Python Unit"
+                    if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
+                        _fail_fast_triggered=1
+                    fi
+                else
+                    [[ "$_format" == "pretty" ]] && printf '\nSkipping Python unit tests (python3 not found)\n'
+                fi
+            fi
+            if (( ! _fail_fast_triggered )); then
+                if command -v python3 >/dev/null 2>&1; then
                     _run_suite "$TESTS_DIR/integration" "Integration"
+                    if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
+                        _fail_fast_triggered=1
+                    fi
+                    if (( ! _fail_fast_triggered )); then
+                        _run_py_suite "$TESTS_DIR/integration" "Python Integration"
+                    fi
                 else
                     [[ "$_format" == "pretty" ]] && printf '\nSkipping integration tests (python3 not found)\n'
                 fi
