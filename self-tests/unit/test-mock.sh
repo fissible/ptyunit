@@ -177,6 +177,27 @@ describe "verification failures"
     assert_contains "$out" "FAIL"
     assert_contains "$out" "expected 5"
 
+    test_that "assert_called_with distinguishes single arg with space from two args"
+    out=$(bash -c "
+        source '$PTYUNIT_DIR/assert.sh'
+        ptyunit_mock ptyunit_test_cmd --output ok
+        ptyunit_test_cmd 'foo bar' >/dev/null
+        assert_called_with ptyunit_test_cmd 'foo bar'
+        ptyunit_test_summary
+    " 2>&1)
+    assert_contains "$out" "OK"
+    assert_not_contains "$out" "FAIL"
+
+    test_that "assert_called_with fails when one-arg-with-space compared to two args"
+    out=$(bash -c "
+        source '$PTYUNIT_DIR/assert.sh'
+        ptyunit_mock ptyunit_test_cmd --output ok
+        ptyunit_test_cmd 'foo bar' >/dev/null
+        assert_called_with ptyunit_test_cmd foo bar
+        ptyunit_test_summary
+    " 2>&1)
+    assert_contains "$out" "FAIL"
+
 end_describe
 
 ptyunit_test_summary

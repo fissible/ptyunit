@@ -131,7 +131,7 @@ _state="$state_dir/$name"
 _n=\$(cat "\$_state.count" 2>/dev/null || echo 0)
 (( _n++ )) || true
 printf '%d' "\$_n" > "\$_state.count"
-printf '%s' "\$*" > "\$_state.args.\$_n"
+printf '%s\0' "\$@" > "\$_state.args.\$_n"
 export MOCK_CALL_NUM="\$_n"
 if [[ -f "\$_state.body" ]]; then
     bash "\$_state.body" "\$@"
@@ -153,7 +153,7 @@ _ptyunit_mock_dispatch() {
     _n=$(cat "$_state.count" 2>/dev/null || echo 0)
     (( _n++ )) || true
     printf '%d' "$_n" > "$_state.count"
-    printf '%s' "$*" > "$_state.args.$_n"
+    printf '%s\0' "$@" > "$_state.args.$_n"
     export MOCK_CALL_NUM="$_n"
     if [[ -f "$_state.body" ]]; then
         bash "$_state.body" "$@"
@@ -225,7 +225,13 @@ mock_args() {
     if [[ -z "$n" ]]; then
         n=$(cat "$_PTYUNIT_MOCK_DIR/state/$name.count" 2>/dev/null || echo 0)
     fi
-    cat "$_PTYUNIT_MOCK_DIR/state/$name.args.$n" 2>/dev/null
+    local f="$_PTYUNIT_MOCK_DIR/state/$name.args.$n"
+    [[ -f "$f" ]] || return 1
+    # Print each NUL-delimited arg on its own line
+    local _arg
+    while IFS= read -r -d '' _arg; do
+        printf '%s\n' "$_arg"
+    done < "$f"
 }
 
 # Print the number of times a mock was called.
@@ -297,10 +303,10 @@ assert_called_times() {
 
 # Assert the last call to a mock had specific args.
 # Usage: assert_called_with <name> <expected_args...>
+# Each argument is compared exactly — "foo bar" (one arg) differs from "foo" "bar" (two args).
 assert_called_with() {
     (( _PTYUNIT_SKIP_CURRENT )) && return
     local name="$1"; shift
-    local expected="$*"
     local count
     count=$(mock_call_count "$name")
 
@@ -313,17 +319,31 @@ assert_called_with() {
         return
     fi
 
-    local actual
-    actual=$(mock_args "$name" "$count")
+    local stored_f="$_PTYUNIT_MOCK_DIR/state/$name.args.$count"
+    local _tmp_expected
+    _tmp_expected=$(mktemp) || {
+        _ptyunit_report_fail "assert_called_with: mktemp failed"
+        return
+    }
+    printf '%s\0' "$@" > "$_tmp_expected"
 
-    if [[ "$actual" == "$expected" ]]; then
+    if cmp -s "$stored_f" "$_tmp_expected"; then
         (( _PTYUNIT_TEST_PASS++ )) || true
     else
         # @pty_skip — only reachable when assertion fails; tested via bash -c subshells
+        # Build human-readable arg lists for the failure message
+        local _actual_display="" _expected_display="" _arg
+        while IFS= read -r -d '' _arg; do
+            _actual_display+="${_actual_display:+ }$(printf '%q' "$_arg")"
+        done < "$stored_f"
+        while IFS= read -r -d '' _arg; do
+            _expected_display+="${_expected_display:+ }$(printf '%q' "$_arg")"
+        done < "$_tmp_expected"
         (( _PTYUNIT_TEST_FAIL++ )) || true
         printf 'FAIL'
         [[ -n "$_PTYUNIT_TEST_NAME" ]] && printf ' [%s]' "$_PTYUNIT_TEST_NAME"
-        printf '\n  mock "%s" last called with: %q\n  expected:                 %q\n' \
-            "$name" "$actual" "$expected"
+        printf '\n  mock "%s" last called with: %s\n  expected:                 %s\n' \
+            "$name" "$_actual_display" "$_expected_display"
     fi
+    rm -f "$_tmp_expected"
 }
