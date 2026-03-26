@@ -589,7 +589,11 @@ def format_json(results: list) -> str:
 _CSS = '''
 /* ── Reset ──────────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
+html{scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:#2e2e2e #161616}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#161616}
+::-webkit-scrollbar-thumb{background:#2e2e2e;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#3a3a3a}
 
 /* ── Base ────────────────────────────────────────────────────── */
 body{
