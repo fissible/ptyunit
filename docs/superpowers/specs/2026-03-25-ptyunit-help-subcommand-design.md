@@ -129,11 +129,14 @@ See 'ptyunit help filters' to run a single file while iterating.
 
 ### Dispatch
 
-Topic name → function name via `${topic//-/_}` (hyphens become underscores):
+Topic name → function name via `${topic//-/_}` (hyphens become underscores).
+Empty topic (bare `ptyunit help`) calls `_help_index` directly — it must not fall
+through to the error path:
 
 ```bash
 _dispatch() {
-    local topic="$1"
+    local topic="${1:-}"
+    [[ -z "$topic" ]] && { _help_index; return; }
     local fn="_help_${topic//-/_}"
     if declare -f "$fn" >/dev/null 2>&1; then
         "$fn"
@@ -165,6 +168,9 @@ _detect_install() {
        || "$PTYUNIT_DIR" == */homebrew/* ]]; then
         printf 'brew'
     elif [[ "$PTYUNIT_DIR" == */deps/* ]]; then
+        # Heuristic: assumes deps/ means bpkg. A git submodule placed under
+        # deps/ would also match. Impact is cosmetic only (annotation in
+        # coverage output).
         printf 'bpkg'
     else
         printf 'submodule'
@@ -287,9 +293,11 @@ writing code that must be compatible across bash versions.
 
 - `_help_index` output contains every topic name in `_TOPICS`
 - `_help_index` output contains the "Where to start" note
+- `_dispatch` with no argument calls `_help_index` (does not error)
 - Unknown topic exits 1 and prints a useful message
 - `_detect_install` returns one of `submodule`, `brew`, or `bpkg`
 - Each `_help_<topic>` function exits 0
+- Registry/function sync: iterate `_TOPICS` in pairs and assert `declare -f "_help_${name//-/_}"` for each entry — one test that catches any topic listed in the registry without a corresponding function
 
 ---
 
