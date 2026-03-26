@@ -185,9 +185,24 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-25 (session 21)_
+_Last updated: 2026-03-25 (session 22)_
 
 **523/523 tests pass (507 bash + 16 Python). v1.4.0 current.**
+
+Completed 2026-03-25 (session 22 — `help` subcommand design review):
+
+- Reviewed `docs/superpowers/specs/2026-03-25-ptyunit-help-subcommand-design.md` — `ptyunit help [topic]` spec.
+- Found and surfaced 3 issues during review:
+  1. **Dispatch bug** — `_dispatch "${1:-}"` with no arg produced `fn="_help_"` (not found) → exit 1 instead of showing the index.
+  2. **Registry/function sync gap** — `_TOPICS` array and `_help_<name>()` functions were independent; no test verified alignment.
+  3. **bpkg detection heuristic** — `*/deps/*` match could false-positive for submodules stored under `deps/`; needed a comment.
+- SME addressed all 3. Spec approved, GitHub issue filed, and implementation complete (`help.sh`, `run.sh` integration, `test-help.sh`).
+
+**Next steps:**
+1. run.sh coverage improvement (71%, 105 missed lines)
+2. Submodule bumps: shellframe, shellql, seed (v1.4.0)
+
+---
 
 Completed 2026-03-25 (session 21 — run.sh Python test discovery):
 
