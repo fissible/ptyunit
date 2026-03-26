@@ -584,6 +584,30 @@ your-project/
 
 ---
 
+## How does it compare?
+
+| Capability | ptyunit | [bats-core](https://github.com/bats-core/bats-core) | [shellspec](https://github.com/shellspec/shellspec) | [shunit2](https://github.com/kward/shunit2) |
+|---|---|---|---|---|
+| PTY / TUI testing | **Yes** | No | No | No |
+| Built-in mocking | **Yes** | No (external) | No | No |
+| Parameterized tests | **Yes** (`test_each`) | No | Yes | No |
+| Nestable describe | **Yes** | No | Yes | No |
+| Parallel execution | Yes | Yes (GNU parallel) | Yes | No |
+| Code coverage | Yes (built-in PS4) | No (kcov only) | No (kcov only) | No |
+| TAP output | Yes | Yes | Yes | No |
+| JUnit XML | Yes | Yes | Yes | No |
+| Test name filter | Yes (`--name`) | Yes | Yes | Yes |
+| Fail-fast | Yes | Yes | Yes | No |
+| Numeric assertions | Yes (`assert_gt/lt/ge/le`) | Manual | Matchers | No |
+| macOS coverage | **Yes** | No (kcov is Linux-only) | No | No |
+| Zero dependencies | **Yes** | No | No | No |
+
+**Speed:** ptyunit is ~15x faster than bats-core on equivalent test suites. See [`bench/showdown/`](bench/showdown/) for the methodology and raw numbers.
+
+The main differentiator is PTY testing — if your scripts render to `/dev/tty` (menus, prompts, progress bars), no other framework listed here can test them. For pure unit testing of bash functions, all four are reasonable choices; ptyunit's advantages are speed, built-in mocking, and working coverage on macOS without external tools.
+
+---
+
 ## Compatibility
 
 | | Supported |
