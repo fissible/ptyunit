@@ -109,6 +109,72 @@ _help_coverage() {
     printf 'Exclude lines:  annotate with  # @pty_skip\n'
 }
 
+_help_pty() {
+    printf 'PTY testing — drive interactive terminal programs with keystrokes.\n\n'
+    printf 'pty_run.py  — one-shot: run a command, send keys, get output\n\n'
+    printf '  out=$(python3 tests/ptyunit/pty_run.py my_menu.sh DOWN DOWN ENTER)\n'
+    printf '  assert_contains "$out" "You selected: cherry"\n\n'
+    printf 'pty_session.py  — stateful: open a session, interact step by step\n\n'
+    printf '  session = PTYSession("my_menu.sh")\n'
+    printf '  session.send("DOWN")\n'
+    printf '  session.send("ENTER")\n'
+    printf '  assert "cherry" in session.screen_text()\n'
+    printf '  session.close()\n\n'
+    printf 'Keys: UP, DOWN, LEFT, RIGHT, ENTER, ESC, BACKSPACE, TAB, or any char.\n'
+    printf 'Output has ANSI escape codes stripped automatically.\n'
+    printf 'Requires Python 3 and a PTY-capable OS (Linux, macOS).\n'
+}
+
+_help_mocking() {
+    printf 'Mocking — replace commands or functions for the duration of a test.\n\n'
+    printf 'Inline mock (fixed output and exit code):\n\n'
+    printf '  ptyunit_mock git --output "pushed" --exit 0\n'
+    printf '  deploy_to_staging\n'
+    printf '  assert_called git\n'
+    printf '  assert_called_with git "push" "origin" "staging"\n\n'
+    printf 'Heredoc mock (custom logic):\n\n'
+    printf "  ptyunit_mock git << 'MOCK'\n"
+    printf '  case "$1" in\n'
+    printf '      push)   echo "error: rejected"; exit 1 ;;\n'
+    printf '      status) echo "On branch main" ;;\n'
+    printf '  esac\n'
+    printf '  MOCK\n\n'
+    printf 'Assertions:\n'
+    printf '  assert_called <cmd>                  was it called at all?\n'
+    printf '  assert_called_with <cmd> [args...]   was it called with these args?\n'
+    printf '  assert_called_times <cmd> <N>        was it called exactly N times?\n\n'
+    printf 'Mocks are cleaned up automatically at the next test_that boundary.\n'
+}
+
+_help_params() {
+    printf 'Parameterised tests — run one callback with multiple input rows.\n\n'
+    printf '  _verify_add() {\n'
+    printf '      assert_eq "$3" "$(( $1 + $2 ))"\n'
+    printf '  }\n\n'
+    printf "  test_each _verify_add << 'PARAMS'\n"
+    printf '  1|2|3\n'
+    printf '  10|20|30\n'
+    printf '  -1|1|0\n'
+    printf '  # this line is a comment and is skipped\n'
+    printf '  PARAMS\n\n'
+    printf 'Fields are split on | and passed as $1 $2 $3 ... to the callback.\n'
+    printf 'Each row is an independent test section. A failing row does not stop\n'
+    printf 'the others. Lines starting with # are skipped.\n'
+}
+
+_help_describe() {
+    printf 'Describe blocks — group related tests under a label.\n\n'
+    printf '  describe "string utils"\n'
+    printf '      describe "upper"\n'
+    printf '          test_that "converts lowercase"\n'
+    printf '          assert_output "HELLO" str_upper "hello"\n'
+    printf '      end_describe\n'
+    printf '  end_describe\n\n'
+    printf 'describe blocks are purely organisational — they prefix the label in\n'
+    printf 'output and in --name filtering. They do not affect test isolation.\n'
+    printf 'Nesting is supported; close each block with end_describe.\n'
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 _dispatch() {
     local topic="${1:-}"

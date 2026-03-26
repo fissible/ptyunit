@@ -64,4 +64,28 @@ assert_contains "$(_help_coverage)" ".coverageignore"
 test_that "_help_coverage output mentions @pty_skip"
 assert_contains "$(_help_coverage)" "@pty_skip"
 
+# ── pty, mocking, params, describe ───────────────────────────────────────────
+
+test_that "_help_pty exits 0 and mentions pty_run.py and pty_session.py"
+_out=$(_help_pty)
+assert_eq "0" "$?"
+assert_contains "$_out" "pty_run.py"
+assert_contains "$_out" "pty_session.py"
+
+test_that "_help_mocking exits 0 and mentions ptyunit_mock and assert_called"
+_out=$(_help_mocking)
+assert_eq "0" "$?"
+assert_contains "$_out" "ptyunit_mock"
+assert_contains "$_out" "assert_called"
+
+test_that "_help_params exits 0 and mentions test_each"
+_out=$(_help_params)
+assert_eq "0" "$?"
+assert_contains "$_out" "test_each"
+
+test_that "_help_describe exits 0 and mentions end_describe"
+_out=$(_help_describe)
+assert_eq "0" "$?"
+assert_contains "$_out" "end_describe"
+
 ptyunit_test_summary
