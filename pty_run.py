@@ -36,6 +36,8 @@ Coverage instrumentation (set by ptyunit's coverage.sh):
                     Requires bash 4.1+ (BASH_XTRACEFD). The child must not
                     already use fd 9 for another purpose.
 
+Requires: Python 3.9+  (os.waitstatus_to_exitcode)
+
 Exit code: the script's own exit code (or 124 on timeout).
 """
 
@@ -44,6 +46,7 @@ import os
 import pty
 import re
 import select
+import signal
 import struct
 import sys
 import tempfile
@@ -209,9 +212,9 @@ def run(
         if exit_code is None:
             # Timeout — kill the child
             try:
-                os.kill(pid, 15)  # SIGTERM
+                os.kill(pid, signal.SIGTERM)
                 time.sleep(0.5)
-                os.kill(pid, 9)   # SIGKILL
+                os.kill(pid, signal.SIGKILL)
             except OSError:
                 pass
             os.waitpid(pid, 0)
