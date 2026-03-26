@@ -9,3 +9,5 @@ on:
 jobs:
   test:
     uses: fissible/.github/.github/workflows/test-bash.yml@main
+    with:
+      bootstrap-command: pip3 install pytest

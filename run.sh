@@ -233,7 +233,7 @@ _run_py_job() {
     local _t0 _t1 _elapsed _raw_elapsed
     _t0=$(_ptyunit_now)
     local out
-    out=$(python3 -m pytest "$f" -q --tb=short "${_ff_args[@]}" 2>&1)
+    out=$(python3 -m pytest "$f" -q --tb=short "${_ff_args[@]+"${_ff_args[@]}"}" 2>&1)
     local rc=$?
     _t1=$(_ptyunit_now)
 
@@ -419,7 +419,11 @@ _run_py_suite() {
                 _filtered+=("$f")
             fi
         done
-        files=("${_filtered[@]:-}")
+        if (( ${#_filtered[@]} > 0 )); then
+            files=("${_filtered[@]}")
+        else
+            files=()
+        fi
     fi
 
     (( ${#files[@]} == 0 )) && return
