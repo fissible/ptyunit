@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+## [1.5.0] - 2026-03-26
+
+### Added
+- Add Screen wrapper with unit tests
+- Add PTYSession core — fork, pyte stream, wait_for_stable
+- Add send() with post-keystroke exit_code detection
+- Discover and run test_*.py files via pytest (#21)
+- Add help.sh skeleton with registry, index, dispatch, and detect
+- Add coverage topic with install detection and color annotation
+- Add pty, mocking, params, describe topics
+- Add setup-teardown, filters, formats, install topics
+- Add skip, matrix topics and registry sync test
+- Wire help subcommand into run.sh _main and _usage
+
+### Fixed
+- Cleanup child process if wait_for_stable raises in __enter__
+- Block on waitpid when EOF detected to catch imminent child exit
+- Use return 1 in _dispatch when sourced; use pwd -P in test
+- Correct %% escaping in coverage flags; tighten --min= assertion
+- Explicitly state label inheritance in _help_describe output
+- Correct setUp/tearDown scoping claim and section-vs-file language
 ## [1.4.0] - 2026-03-25
 
 ### Added
