@@ -332,6 +332,7 @@ _run_suite() {
 
     local work_dir
     work_dir=$(mktemp -d) || { printf 'Error: mktemp failed\n' >&2; return 1; }
+    _all_work_dirs+=("$work_dir")
 
     # Save file list for TAP/JUnit emission
     for f in "${files[@]}"; do
@@ -344,7 +345,7 @@ _run_suite() {
     # polling. Compatible with bash 3.2+ (no wait -n required).
     local _sem
     _sem=$(mktemp -u)
-    mkfifo "$_sem"
+    mkfifo "$_sem" || { printf 'Error: mkfifo failed for worker semaphore\n' >&2; return 1; }
     exec 4<>"$_sem"
     rm -f "$_sem"  # safe once fd is open
 
@@ -438,6 +439,7 @@ _run_py_suite() {
 
     local work_dir
     work_dir=$(mktemp -d) || { printf 'Error: mktemp failed\n' >&2; return 1; }
+    _all_work_dirs+=("$work_dir")
 
     for f in "${files[@]}"; do
         printf '%s\n' "$f"
@@ -445,7 +447,7 @@ _run_py_suite() {
 
     local _sem
     _sem=$(mktemp -u)
-    mkfifo "$_sem"
+    mkfifo "$_sem" || { printf 'Error: mkfifo failed for worker semaphore\n' >&2; return 1; }
     exec 5<>"$_sem"
     rm -f "$_sem"
 
@@ -491,6 +493,15 @@ _run_py_suite() {
     else
         rm -rf "$work_dir"
     fi
+}
+
+# ── Cleanup handler (called by EXIT trap in _main) ───────────────────────────
+_ptyunit_runner_cleanup() {
+    local _wd
+    for _wd in "${_all_work_dirs[@]+"${_all_work_dirs[@]}"}"; do
+        rm -rf "$_wd"
+    done
+    [[ -n "${_fail_sentinel:-}" ]] && rm -f "${_fail_sentinel:-}"
 }
 
 # ── TAP output emitter ──────────────────────────────────────────────────────
@@ -734,6 +745,10 @@ _main() {
         _fail_sentinel="${TMPDIR:-/tmp}/ptyunit-fail-$$"
     fi
 
+    # Work dir registry + EXIT trap: clean up temp dirs on SIGINT/SIGTERM/normal exit
+    _all_work_dirs=()
+    trap '_ptyunit_runner_cleanup' EXIT
+
     # ── Dispatch ──────────────────────────────────────────────────────────────
     if [[ "$_format" == "pretty" ]]; then
         if (( _jobs == 1 )); then
@@ -753,7 +768,9 @@ _main() {
     case "$_mode" in
         --unit)
             _run_suite "$TESTS_DIR/unit" "Unit"
-            if command -v python3 >/dev/null 2>&1; then
+            if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
+                [[ "$_format" == "pretty" ]] && printf '\nSkipping Python unit tests (--fail-fast)\n'
+            elif command -v python3 >/dev/null 2>&1; then
                 _run_py_suite "$TESTS_DIR/unit" "Python Unit"
             else
                 [[ "$_format" == "pretty" ]] && printf '\nSkipping Python unit tests (python3 not found)\n'
@@ -764,7 +781,11 @@ _main() {
                 [[ "$_format" == "pretty" ]] && printf '\nSkipping integration tests (python3 not found)\n'
             else
                 _run_suite "$TESTS_DIR/integration" "Integration"
-                _run_py_suite "$TESTS_DIR/integration" "Python Integration"
+                if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
+                    [[ "$_format" == "pretty" ]] && printf '\nSkipping Python integration tests (--fail-fast)\n'
+                else
+                    _run_py_suite "$TESTS_DIR/integration" "Python Integration"
+                fi
             fi
             ;;
         --all)
