@@ -372,4 +372,10 @@ _main_out=$( TESTS_DIR="$_main_td"; _main --unit --format pretty )
 assert_contains "$_main_out" "Failed files:"
 rm -rf "$_main_td"
 
+test_that "_main delegates 'help' subcommand to help.sh"
+_help_out=$(bash "$PTYUNIT_DIR/run.sh" help 2>&1)
+assert_eq "0" "$?"
+assert_contains "$_help_out" "coverage"
+assert_contains "$_help_out" "Where to start"
+
 ptyunit_test_summary

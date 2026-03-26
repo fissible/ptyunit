@@ -76,6 +76,8 @@ Output:
 
   -h, --help          Show this help
   --version           Show version
+
+  help [TOPIC]        Topic help  (run 'ptyunit help' to list topics)
 USAGE
     exit 0
 }
@@ -614,6 +616,10 @@ _emit_junit() {
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 _main() {
+    if [[ "${1:-}" == "help" ]]; then
+        bash "$PTYUNIT_DIR/help.sh" "${@:2}"; exit $?
+    fi
+
     # ── Flag defaults ─────────────────────────────────────────────────────────
     _mode="--all"
     _jobs=$(nproc 2>/dev/null || echo 4)
