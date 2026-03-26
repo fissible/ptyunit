@@ -185,22 +185,27 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-25 (session 22)_
+_Last updated: 2026-03-26 (session 23)_
 
-**523/523 tests pass (507 bash + 16 Python). v1.4.0 current.**
+**597/597 tests pass (587 bash + 10 Python). v1.5.0 current.**
 
-Completed 2026-03-25 (session 22 — `help` subcommand design review):
+Completed 2026-03-26 (session 23 — help subcommand + coverage improvements):
 
-- Reviewed `docs/superpowers/specs/2026-03-25-ptyunit-help-subcommand-design.md` — `ptyunit help [topic]` spec.
-- Found and surfaced 3 issues during review:
-  1. **Dispatch bug** — `_dispatch "${1:-}"` with no arg produced `fn="_help_"` (not found) → exit 1 instead of showing the index.
-  2. **Registry/function sync gap** — `_TOPICS` array and `_help_<name>()` functions were independent; no test verified alignment.
-  3. **bpkg detection heuristic** — `*/deps/*` match could false-positive for submodules stored under `deps/`; needed a comment.
-- SME addressed all 3. Spec approved, GitHub issue filed, and implementation complete (`help.sh`, `run.sh` integration, `test-help.sh`).
+- Implemented `ptyunit help [topic]` (11 topics: coverage, pty, mocking, params, describe, setup-teardown, filters, formats, install, skip, matrix). New files: `help.sh`, `self-tests/unit/test-help.sh` (66 assertions). `run.sh` wired with 2-line intercept at top of `_main()`.
+- Added targeted coverage tests for install detection, flag parsing (`=` forms), and `_main` dispatch paths. run.sh: 84% → 85%; help.sh: new at 94%.
+- Released **v1.5.0** (`bash release.sh minor`). Homebrew tap bumped to v1.5.0 (`help.sh` and `pty_session.py` added to formula `libexec.install`).
+- Coverage HTML report improvements: thinner nav scrollbar (3px), auto-scroll to active (rightmost) tab on load, unified scrollbar style across nav and iframe content, case branch labels now inherit coverage from their first body line (Option B — run.sh jumps 85% → 89%, total 91% → 93% with `--all`).
+- Confirmed `--all` is the right standard for coverage reports (integration tests cover `examples/confirm.sh` and `examples/menu.sh`; `--unit` only gives 83%).
+- `ptyunit help` added to README under new `## Help` section.
+
+**Decisions:**
+- Coverage default: `--all --src=.` (not `--unit`); documents honestly at 93%.
+- Case label coverage: Option B (inherit from branch body), not exclusion — shows which branches were exercised.
 
 **Next steps:**
-1. run.sh coverage improvement (71%, 105 missed lines)
-2. Submodule bumps: shellframe, shellql, seed (v1.4.0)
+1. Submodule bumps: shellframe, shellql, seed (v1.5.0) — flag for PM.
+2. `pty_session.py` has no direct self-tests beyond `test_screen.py` (Screen wrapper only). No `PTYSession` behavioral tests in self-tests suite.
+3. v1.5.1 pending: 2 `fix(coverage)` commits (scrollbar style + case labels). Cut when convenient.
 
 ---
 

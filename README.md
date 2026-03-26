@@ -288,6 +288,23 @@ end_describe
 
 ---
 
+## Help
+
+Every feature has a built-in reference page:
+
+```bash
+ptyunit help              # list all topics
+ptyunit help coverage     # coverage flags and install-method examples
+ptyunit help pty          # PTY/TUI testing
+ptyunit help mocking      # mock commands and functions
+ptyunit help params       # parameterised tests
+ptyunit help filters      # run a subset by file or name
+ptyunit help formats      # TAP, JUnit XML, pretty output
+ptyunit help install      # submodule vs brew vs bpkg tradeoffs
+```
+
+---
+
 ## Running tests
 
 ```bash
