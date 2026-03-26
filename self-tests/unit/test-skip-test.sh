@@ -100,4 +100,20 @@ bash -c "
 " > /dev/null 2>&1 || rc=$?
 assert_eq "1" "$rc"
 
+# ── Double skip_test does not double-count ───────────────────────────────────
+
+ptyunit_test_begin "skip_test: calling twice only counts one skip"
+out=$(bash -c "
+    source '$PTYUNIT_DIR/assert.sh'
+    ptyunit_test_begin 'one'
+    ptyunit_skip_test 'first'
+    ptyunit_skip_test 'second'
+    ptyunit_test_begin 'two'
+    assert_eq 'a' 'a'
+    ptyunit_test_summary
+" 2>&1)
+# Should show 1 skipped, not 2
+assert_contains "$out" "1 skipped"
+assert_not_contains "$out" "2 skipped"
+
 ptyunit_test_summary

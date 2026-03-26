@@ -29,7 +29,7 @@ _PTYUNIT_TEST_NAME=""
 _PTYUNIT_SKIP_CURRENT=0
 _PTYUNIT_SAVED_PWD=""
 _PTYUNIT_SECTION_FILTERED=0
-_PTYUNIT_DESCRIBE_STACK=""
+_PTYUNIT_DESCRIBE_STACK=()   # indexed array of describe names (safe with any name content)
 _PTYUNIT_DESCRIBE_DEPTH=0
 _PTYUNIT_DESCRIBE_SETUPS=()
 _PTYUNIT_DESCRIBE_TEARDOWNS=()
@@ -86,8 +86,16 @@ ptyunit_test_begin() {
     fi
 
     # Build the full test name (with describe prefix)
-    if [[ -n "$_PTYUNIT_DESCRIBE_STACK" ]]; then
-        _PTYUNIT_TEST_NAME="$_PTYUNIT_DESCRIBE_STACK > $1"
+    if (( _PTYUNIT_DESCRIBE_DEPTH > 0 )); then
+        local _ptyunit_prefix="" _di
+        for (( _di=0; _di < _PTYUNIT_DESCRIBE_DEPTH; _di++ )); do
+            if [[ -n "$_ptyunit_prefix" ]]; then
+                _ptyunit_prefix+=" > ${_PTYUNIT_DESCRIBE_STACK[$_di]}"
+            else
+                _ptyunit_prefix="${_PTYUNIT_DESCRIBE_STACK[$_di]}"
+            fi
+        done
+        _PTYUNIT_TEST_NAME="$_ptyunit_prefix > $1"
     else
         _PTYUNIT_TEST_NAME="$1"
     fi
@@ -133,11 +141,7 @@ describe() {
     local setup_fn="${2:-}"
     local teardown_fn="${3:-}"
 
-    if [[ -n "$_PTYUNIT_DESCRIBE_STACK" ]]; then
-        _PTYUNIT_DESCRIBE_STACK+=" > $name"
-    else
-        _PTYUNIT_DESCRIBE_STACK="$name"
-    fi
+    _PTYUNIT_DESCRIBE_STACK[$_PTYUNIT_DESCRIBE_DEPTH]="$name"
     _PTYUNIT_DESCRIBE_SETUPS[$_PTYUNIT_DESCRIBE_DEPTH]="$setup_fn"
     _PTYUNIT_DESCRIBE_TEARDOWNS[$_PTYUNIT_DESCRIBE_DEPTH]="$teardown_fn"
     (( _PTYUNIT_DESCRIBE_DEPTH++ )) || true
@@ -153,13 +157,9 @@ end_describe() {
 
     if (( _PTYUNIT_DESCRIBE_DEPTH > 0 )); then
         (( _PTYUNIT_DESCRIBE_DEPTH-- )) || true
+        _PTYUNIT_DESCRIBE_STACK[$_PTYUNIT_DESCRIBE_DEPTH]=""
         _PTYUNIT_DESCRIBE_SETUPS[$_PTYUNIT_DESCRIBE_DEPTH]=""
         _PTYUNIT_DESCRIBE_TEARDOWNS[$_PTYUNIT_DESCRIBE_DEPTH]=""
-    fi
-    if [[ "$_PTYUNIT_DESCRIBE_STACK" == *" > "* ]]; then
-        _PTYUNIT_DESCRIBE_STACK="${_PTYUNIT_DESCRIBE_STACK% > *}"
-    else
-        _PTYUNIT_DESCRIBE_STACK=""
     fi
 }
 
@@ -193,6 +193,7 @@ test_each() {
 # next test_that / test_it / test_they call.
 # Usage: ptyunit_skip_test [reason]
 ptyunit_skip_test() {
+    (( _PTYUNIT_SKIP_CURRENT )) && return   # already skipped — don't double-count
     local reason="${1:-}"
     _PTYUNIT_SKIP_CURRENT=1
     (( _PTYUNIT_TEST_SKIP++ )) || true
@@ -392,6 +393,11 @@ assert_line() {
 assert_count() {
     (( _PTYUNIT_SKIP_CURRENT )) && return
     local haystack="$1" needle="$2" expected="$3" msg="${4:-}"
+    if [[ -z "$needle" ]]; then
+        # @pty_skip
+        _ptyunit_report_fail "$msg" "  needle must be non-empty"
+        return
+    fi
     local count=0 tmp="$haystack"
     while [[ "$tmp" == *"$needle"* ]]; do
         (( count++ ))

@@ -58,6 +58,11 @@ describe "assert_count"
     # "aa" in "aaaa" — each match advances: positions 0,1,2 → 3 matches
     assert_count "aaaa" "a" 4
 
+    test_that "empty needle fails with error (not infinite loop)"
+    out=$(bash -c "source '$PTYUNIT_DIR/assert.sh'; assert_count 'anything' '' 0" 2>&1)
+    assert_contains "$out" "FAIL"
+    assert_contains "$out" "non-empty"
+
 end_describe
 
 # ═════════════════════════════════════════════════════════════════════════════

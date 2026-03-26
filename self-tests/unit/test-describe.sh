@@ -226,4 +226,14 @@ describe "outer scope"
     end_describe
 end_describe
 
+# ── describe name containing ' > ' does not corrupt the stack ────────────────
+
+describe "input > output"
+    test_that "describe: name with ' > ' preserves stack correctly"
+    assert_contains "$_PTYUNIT_TEST_NAME" "input > output"
+end_describe
+
+test_that "describe: after popping ' > ' describe, name has no prefix"
+assert_not_contains "$_PTYUNIT_TEST_NAME" "input"
+
 ptyunit_test_summary
