@@ -193,14 +193,14 @@ _help_setup_teardown() {
     printf '  tearDown.sh example:\n'
     printf '    rm -rf "$PTYUNIT_TEST_TMPDIR"\n\n'
     printf 'Failure behaviour:\n\n'
-    printf '  If setUp.sh exits non-zero, the test section is counted as a failure\n'
+    printf '  If setUp.sh exits non-zero, the test file is counted as a failure\n'
     printf '  and tearDown.sh still runs — so cleanup always happens.\n\n'
     printf '  If tearDown.sh exits non-zero, it is logged but does not override a\n'
     printf '  passing test result.\n\n'
-    printf 'Scoping rules:\n\n'
-    printf '  setUp.sh and tearDown.sh are sourced (not exec-d), so they share the\n'
-    printf '  same shell as the test file. Variables set in setUp.sh are visible to\n'
-    printf '  the test section and to tearDown.sh.\n'
+    printf 'Passing state between hooks:\n\n'
+    printf '  setUp.sh and tearDown.sh run as subprocesses (bash), not sourced.\n'
+    printf '  They do not share the shell environment with the test file.\n'
+    printf '  Use exported variables or files in PTYUNIT_TEST_TMPDIR to pass state.\n'
 }
 
 _help_filters() {
