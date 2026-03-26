@@ -88,4 +88,50 @@ _out=$(_help_describe)
 assert_eq "0" "$?"
 assert_contains "$_out" "end_describe"
 
+# ── _help_setup_teardown ──────────────────────────────────────────────────────
+
+test_that "_help_setup_teardown exits 0 and mentions setUp.sh"
+_ht_out=$(_help_setup_teardown)
+assert_eq "0" "$?"
+assert_contains "$_ht_out" "setUp.sh"
+assert_contains "$_ht_out" "tearDown.sh"
+
+test_that "_help_setup_teardown mentions PTYUNIT_TEST_TMPDIR"
+assert_contains "$(_help_setup_teardown)" "PTYUNIT_TEST_TMPDIR"
+
+# ── _help_filters ─────────────────────────────────────────────────────────────
+
+test_that "_help_filters exits 0 and mentions --filter and --name"
+_hf_out=$(_help_filters)
+assert_eq "0" "$?"
+assert_contains "$_hf_out" "--filter"
+assert_contains "$_hf_out" "--name"
+
+test_that "_help_filters explains combining both flags"
+assert_contains "$(_help_filters)" "Combine"
+
+# ── _help_formats ─────────────────────────────────────────────────────────────
+
+test_that "_help_formats exits 0 and mentions tap and junit"
+_hfmt_out=$(_help_formats)
+assert_eq "0" "$?"
+assert_contains "$_hfmt_out" "tap"
+assert_contains "$_hfmt_out" "junit"
+
+test_that "_help_formats mentions --verbose"
+assert_contains "$(_help_formats)" "--verbose"
+
+# ── _help_install ─────────────────────────────────────────────────────────────
+
+test_that "_help_install exits 0 and mentions submodule and brew"
+_hi_out=$(_help_install)
+assert_eq "0" "$?"
+assert_contains "$_hi_out" "submodule"
+assert_contains "$_hi_out" "brew"
+
+test_that "_help_install mentions bpkg and make test"
+_hi_out=$(_help_install)
+assert_contains "$_hi_out" "bpkg"
+assert_contains "$_hi_out" "make test"
+
 ptyunit_test_summary
