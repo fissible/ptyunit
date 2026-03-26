@@ -74,6 +74,43 @@ _help_index() {
 # Placeholders — filled in by subsequent tasks.
 # Each _help_<name>() prints to stdout and exits 0.
 
+_help_coverage() {
+    _help_color_setup
+    local _install
+    _install=$(_detect_install)
+
+    printf 'Code coverage — measure which lines of your source ran during tests.\n\n'
+
+    if [[ "$_install" == "submodule" ]]; then
+        printf '%s# git submodule  <- detected%s\n' "${_BOLD}${_GREEN}" "${_RESET}"
+    else
+        printf '# git submodule\n'
+    fi
+    printf 'bash tests/ptyunit/coverage.sh --unit --src=src\n\n'
+
+    if [[ "$_install" == "bpkg" ]]; then
+        printf '%s# bpkg  <- detected%s\n' "${_BOLD}${_GREEN}" "${_RESET}"
+    else
+        printf '# bpkg\n'
+    fi
+    printf 'bash deps/bpkg/ptyunit/coverage.sh --unit --src=src\n\n'
+
+    if [[ "$_install" == "brew" ]]; then
+        printf '%s# Homebrew  <- detected%s\n' "${_BOLD}${_GREEN}" "${_RESET}"
+    else
+        printf '# Homebrew\n'
+    fi
+    printf 'bash "$(brew --prefix ptyunit)/libexec/coverage.sh" --unit --src=src\n\n'
+
+    printf 'Flags:\n'
+    printf '  --unit / --all       Which suites to run (default: --all)\n'
+    printf '  --src=<dir>          Directory to measure  (default: src/ or .)\n'
+    printf '  --report=text|json|html\n'
+    printf '  --min=N              Exit 1 if coverage < N%%%%  (CI gate)\n\n'
+    printf 'Exclude files:  add glob patterns to .coverageignore at project root\n'
+    printf 'Exclude lines:  annotate with  # @pty_skip\n'
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 _dispatch() {
     local topic="${1:-}"

@@ -40,4 +40,28 @@ case "$_inst" in
     *) assert_eq "submodule|brew|bpkg" "$_inst" ;;
 esac
 
+# ── _help_coverage ────────────────────────────────────────────────────────────
+
+test_that "_help_coverage exits 0"
+_help_coverage >/dev/null
+assert_eq "0" "$?"
+
+test_that "_help_coverage output contains all three install variants"
+_cov=$(_help_coverage)
+assert_contains "$_cov" "tests/ptyunit/coverage.sh"
+assert_contains "$_cov" "deps/bpkg/ptyunit/coverage.sh"
+assert_contains "$_cov" "brew --prefix ptyunit"
+
+test_that "_help_coverage output contains flags table"
+_cov=$(_help_coverage)
+assert_contains "$_cov" "--src="
+assert_contains "$_cov" "--report="
+assert_contains "$_cov" "--min="
+
+test_that "_help_coverage output mentions .coverageignore"
+assert_contains "$(_help_coverage)" ".coverageignore"
+
+test_that "_help_coverage output mentions @pty_skip"
+assert_contains "$(_help_coverage)" "@pty_skip"
+
 ptyunit_test_summary
