@@ -226,4 +226,150 @@ test_that "_emit_junit outputs skipped message for missing test"
 result=$(_emit_junit)
 assert_match "did not run" "$result"
 
+# ── _run_job: setUp failure ───────────────────────────────────────────────────
+
+test_that "_run_job writes setUp-failed output when setUp exits non-zero"
+_rj_tmp=$(mktemp -d); _rj_wd=$(mktemp -d)
+printf '#!/usr/bin/env bash\nexit 1\n' > "$_rj_tmp/setUp.sh"
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\ntest_that "x"\nassert_eq "1" "1"\nptyunit_test_summary\n' "$PTYUNIT_DIR" > "$_rj_tmp/test-su.sh"
+chmod +x "$_rj_tmp/setUp.sh" "$_rj_tmp/test-su.sh"
+_run_job "$_rj_tmp/test-su.sh" "$_rj_tmp/setUp.sh" "" "$_rj_wd" 10
+assert_contains "$(cat "$_rj_wd/test-su.sh.out")" "setUp failed"
+rm -rf "$_rj_tmp" "$_rj_wd"
+
+# ── _run_job: rc=3 skip ───────────────────────────────────────────────────────
+
+test_that "_run_job writes rc=3 .res when test file calls ptyunit_skip"
+_rj_tmp=$(mktemp -d); _rj_wd=$(mktemp -d)
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\nptyunit_skip "reason"\n' "$PTYUNIT_DIR" > "$_rj_tmp/test-sk.sh"
+chmod +x "$_rj_tmp/test-sk.sh"
+_run_job "$_rj_tmp/test-sk.sh" "" "" "$_rj_wd" 10
+read -r _rj_rc _rj_pass _rj_total _rj_e < "$_rj_wd/test-sk.sh.res"
+assert_eq "3" "$_rj_rc"
+rm -rf "$_rj_tmp" "$_rj_wd"
+
+# ── _run_job: fail output ─────────────────────────────────────────────────────
+
+test_that "_run_job writes FAIL output line when test file has a failing assertion"
+_rj_tmp=$(mktemp -d); _rj_wd=$(mktemp -d)
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\ntest_that "x"\nassert_eq "1" "2"\nptyunit_test_summary\n' "$PTYUNIT_DIR" > "$_rj_tmp/test-fb.sh"
+chmod +x "$_rj_tmp/test-fb.sh"
+_run_job "$_rj_tmp/test-fb.sh" "" "" "$_rj_wd" 10
+assert_contains "$(cat "$_rj_wd/test-fb.sh.out")" "FAIL"
+rm -rf "$_rj_tmp" "$_rj_wd"
+
+# ── _run_job: verbose timing ──────────────────────────────────────────────────
+
+test_that "_run_job writes elapsed timing in output when _verbose=1"
+_verbose=1
+_rj_tmp=$(mktemp -d); _rj_wd=$(mktemp -d)
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\ntest_that "x"\nassert_eq "1" "1"\nptyunit_test_summary\n' "$PTYUNIT_DIR" > "$_rj_tmp/test-vb.sh"
+chmod +x "$_rj_tmp/test-vb.sh"
+_run_job "$_rj_tmp/test-vb.sh" "" "" "$_rj_wd" 10
+assert_contains "$(cat "$_rj_wd/test-vb.sh.out")" " in "
+rm -rf "$_rj_tmp" "$_rj_wd"
+
+# ── _run_job: tearDown always runs ────────────────────────────────────────────
+
+test_that "_run_job runs tearDown.sh after a passing test"
+_rj_tmp=$(mktemp -d); _rj_wd=$(mktemp -d)
+_rj_marker="$_rj_tmp/teardown-ran"
+printf '#!/usr/bin/env bash\ntouch "%s"\n' "$_rj_marker" > "$_rj_tmp/tearDown.sh"
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\ntest_that "x"\nassert_eq "1" "1"\nptyunit_test_summary\n' "$PTYUNIT_DIR" > "$_rj_tmp/test-td.sh"
+chmod +x "$_rj_tmp/tearDown.sh" "$_rj_tmp/test-td.sh"
+_run_job "$_rj_tmp/test-td.sh" "" "$_rj_tmp/tearDown.sh" "$_rj_wd" 10
+assert_file_exists "$_rj_marker"
+rm -rf "$_rj_tmp" "$_rj_wd"
+
+# ── _run_suite: TAP work_dir saved ───────────────────────────────────────────
+
+test_that "_run_suite appends to _suite_work_dirs when format is tap"
+_rj_tmp=$(mktemp -d)
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\ntest_that "x"\nassert_eq "1" "1"\nptyunit_test_summary\n' "$PTYUNIT_DIR" > "$_rj_tmp/test-tp.sh"
+chmod +x "$_rj_tmp/test-tp.sh"
+_format="tap"
+_run_suite "$_rj_tmp" "TapSuite" >/dev/null
+# _suite_work_dirs[0] is the emit fixture ws (from ptyunit_setup); [1] is the new tap dir
+assert_eq "2" "${#_suite_work_dirs[@]}"
+rm -rf "$_rj_tmp" "${_suite_work_dirs[1]}"
+_suite_work_dirs=("${_suite_work_dirs[0]}")
+
+# ── _run_suite: skip counting ─────────────────────────────────────────────────
+
+test_that "_run_suite increments _total_skip for files that call ptyunit_skip"
+_rj_tmp=$(mktemp -d)
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\nptyunit_skip "reason"\n' "$PTYUNIT_DIR" > "$_rj_tmp/test-sk2.sh"
+chmod +x "$_rj_tmp/test-sk2.sh"
+_format="pretty"
+_run_suite "$_rj_tmp" "SkipSuite" >/dev/null
+assert_not_eq "0" "$_total_skip"
+rm -rf "$_rj_tmp"
+
+# ── _run_suite: failed file tracking ─────────────────────────────────────────
+
+test_that "_run_suite adds failing file name to _failed_files"
+_rj_tmp=$(mktemp -d)
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\ntest_that "x"\nassert_eq "1" "2"\nptyunit_test_summary\n' "$PTYUNIT_DIR" > "$_rj_tmp/test-fl.sh"
+chmod +x "$_rj_tmp/test-fl.sh"
+_format="pretty"
+_run_suite "$_rj_tmp" "FailSuite" >/dev/null
+assert_not_eq "0" "${#_failed_files[@]}"
+rm -rf "$_rj_tmp"
+
+# ── _main: color labels via FORCE_COLOR ───────────────────────────────────────
+
+test_that "_main sets ANSI color labels when FORCE_COLOR=1"
+( FORCE_COLOR=1; _main --unit --filter __no_such_test__ ) >/dev/null 2>&1
+assert_eq "0" "$?"
+
+# ── _main: sequential header ──────────────────────────────────────────────────
+
+test_that "_main prints sequential header when --jobs 1"
+_main_out=$( _main --unit --jobs 1 --format pretty --filter __no_such_test__ )
+assert_contains "$_main_out" "sequential"
+
+# ── _main: name filter export ─────────────────────────────────────────────────
+
+test_that "_main exports PTYUNIT_FILTER_NAME when --name is given"
+( _main --unit --name sometest --filter __no_such_test__ ) >/dev/null 2>&1
+assert_eq "0" "$?"
+
+# ── _main: missing-value flag errors ─────────────────────────────────────────
+
+test_that "_main --jobs with no value exits 2"
+( _main --jobs ) 2>/dev/null
+assert_eq "2" "$?"
+
+test_that "_main --filter with no value exits 2"
+( _main --filter ) 2>/dev/null
+assert_eq "2" "$?"
+
+test_that "_main --name with no value exits 2"
+( _main --name ) 2>/dev/null
+assert_eq "2" "$?"
+
+test_that "_main --format with no value exits 2"
+( _main --format ) 2>/dev/null
+assert_eq "2" "$?"
+
+# ── _main: pretty summary skip/fail listing ───────────────────────────────────
+
+test_that "_main pretty summary lists skipped files"
+_main_td=$(mktemp -d)
+mkdir -p "$_main_td/unit"
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\nptyunit_skip "reason"\n' "$PTYUNIT_DIR" > "$_main_td/unit/test-sk3.sh"
+chmod +x "$_main_td/unit/test-sk3.sh"
+_main_out=$( TESTS_DIR="$_main_td"; _main --unit --format pretty )
+assert_contains "$_main_out" "Skipped:"
+rm -rf "$_main_td"
+
+test_that "_main pretty summary lists failed files"
+_main_td=$(mktemp -d)
+mkdir -p "$_main_td/unit"
+printf '#!/usr/bin/env bash\nset -u\nPTYUNIT_DIR="%s"\nsource "$PTYUNIT_DIR/assert.sh"\ntest_that "x"\nassert_eq "1" "2"\nptyunit_test_summary\n' "$PTYUNIT_DIR" > "$_main_td/unit/test-fl2.sh"
+chmod +x "$_main_td/unit/test-fl2.sh"
+_main_out=$( TESTS_DIR="$_main_td"; _main --unit --format pretty )
+assert_contains "$_main_out" "Failed files:"
+rm -rf "$_main_td"
+
 ptyunit_test_summary
