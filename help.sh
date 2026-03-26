@@ -71,8 +71,6 @@ _help_index() {
 }
 
 # ── Topic functions ───────────────────────────────────────────────────────────
-# Placeholders — filled in by subsequent tasks.
-# Each _help_<name>() prints to stdout and exits 0.
 
 _help_coverage() {
     _help_color_setup
@@ -106,7 +104,7 @@ _help_coverage() {
     printf '  --unit / --all       Which suites to run (default: --all)\n'
     printf '  --src=<dir>          Directory to measure  (default: src/ or .)\n'
     printf '  --report=text|json|html\n'
-    printf '  --min=N              Exit 1 if coverage < N%%%%  (CI gate)\n\n'
+    printf '  --min=N              Exit 1 if coverage < N%%  (CI gate)\n\n'
     printf 'Exclude files:  add glob patterns to .coverageignore at project root\n'
     printf 'Exclude lines:  annotate with  # @pty_skip\n'
 }

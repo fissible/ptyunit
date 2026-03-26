@@ -56,7 +56,7 @@ test_that "_help_coverage output contains flags table"
 _cov=$(_help_coverage)
 assert_contains "$_cov" "--src="
 assert_contains "$_cov" "--report="
-assert_contains "$_cov" "--min="
+assert_contains "$_cov" "--min=N"
 
 test_that "_help_coverage output mentions .coverageignore"
 assert_contains "$(_help_coverage)" ".coverageignore"
