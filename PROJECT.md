@@ -185,9 +185,31 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-26 (session 23)_
+_Last updated: 2026-03-26 (session 24)_
 
-**597/597 tests pass (587 bash + 10 Python). v1.5.0 current.**
+**634/634 tests pass (624 bash + 10 Python). v1.5.1 current.**
+
+Completed 2026-03-26 (session 24 — CI fix + v1.5.1 release):
+
+- Fixed 3 bugs exposed by the targeted coverage tests added in session 23:
+  1. `_run_py_suite` filter bug: `files=("${_filtered[@]:-}")` set `files=("")` when no files matched, bypassing the empty guard and calling `_run_py_job ""`. Fixed to use same `if (( ${#_filtered[@]} > 0 ))` pattern as `_run_suite`.
+  2. `_run_py_job` bash 3.2 empty array: `"${_ff_args[@]}"` with empty array + `set -u` crashes bash 3.2. Fixed with `${_ff_args[@]+"${_ff_args[@]}"}` idiom.
+  3. CI: no `bootstrap-command` in `ci.yml` meant `pytest` was never installed on runners. Added `pip3 install pytest`.
+- Released **v1.5.1** (`bash release.sh patch`). Homebrew tap bumped to v1.5.1.
+- 634/634 assertions pass (was 585/600 — 15 bash tests now pass + all Python tests pass in CI).
+
+**Decisions:**
+- None new.
+
+**Next steps:**
+1. Submodule bumps: shellframe, shellql, seed (v1.5.1) — flag for PM.
+2. `pty_session.py` still has no direct `PTYSession` behavioral tests.
+3. `run.sh` coverage opportunity still open (next major opportunity).
+
+**PM ticket proposal (XS — in `fissible/.github`):**
+- Add optional Homebrew formula bump step to `release.sh`. Pattern: check for a `.homebrew-tap` config file in repo root (like `release.sh` already does for `package.json`). If present, file specifies tap path and formula name; script fetches sha256, updates the formula, commits, and pushes. Repos without `.homebrew-tap` are unaffected — safe to copy `release.sh` everywhere. Suggest: `echo "fissible/homebrew-tap Formula/ptyunit.rb" > .homebrew-tap`.
+
+---
 
 Completed 2026-03-26 (session 23 — help subcommand + coverage improvements):
 
