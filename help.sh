@@ -274,6 +274,49 @@ _help_install() {
     printf '  This gives contributors a single entry point regardless of CI system.\n'
 }
 
+_help_skip() {
+    printf 'Skipping tests — exit a file or test section at runtime.\n\n'
+    printf 'Skip an entire test file:\n\n'
+    printf '  ptyunit_skip "reason"\n\n'
+    printf '  Call at the top of a test file (before test_that sections) to skip the\n'
+    printf '  whole file. The file exits with rc=3, which ptyunit records as SKIP.\n'
+    printf '  It does not count as a pass or a failure.\n\n'
+    printf 'Skip based on bash version:\n\n'
+    printf '  ptyunit_require_bash 4\n\n'
+    printf '  Convenience wrapper: skips the file if the running bash major version is\n'
+    printf '  less than the required version. Equivalent to:\n\n'
+    printf '    (( BASH_VERSINFO[0] < 4 )) && ptyunit_skip "requires bash 4+"\n\n'
+    printf 'Both appear in the summary as SKIP:\n\n'
+    printf '  SKIP  tests/unit/test-bash4-feature.sh  (requires bash 4+)\n\n'
+    printf 'Example — skip an entire file on bash 3:\n\n'
+    printf '  #!/usr/bin/env bash\n'
+    printf '  source tests/ptyunit/assert.sh\n'
+    printf '  ptyunit_require_bash 4\n\n'
+    printf '  test_that "uses associative array"\n'
+    printf '  declare -A _map=([a]=1)\n'
+    printf '  assert_eq "1" "${_map[a]}"\n\n'
+    printf '  ptyunit_test_summary\n'
+}
+
+_help_matrix() {
+    printf 'Matrix testing — run the full suite against multiple bash versions.\n\n'
+    printf 'Command:\n\n'
+    printf '  bash docker/run-matrix.sh\n\n'
+    printf 'Requires Docker to be installed and running.\n\n'
+    printf 'What it does:\n\n'
+    printf '  Runs the complete ptyunit test suite inside Docker containers for each\n'
+    printf '  supported bash version: 3.2, 4.x, and 5.x. Each version runs in\n'
+    printf '  isolation. Results for all versions are reported together.\n\n'
+    printf 'When to use:\n\n'
+    printf '  - Before cutting a release, to confirm nothing regressed across versions\n'
+    printf '  - When writing code that must be compatible across bash 3.2–5.x\n'
+    printf '  - When using syntax that behaves differently between major versions\n'
+    printf '    (e.g. associative arrays, nameref, printf %q differences)\n\n'
+    printf 'Tip: use ptyunit_require_bash N in individual test files to skip tests\n'
+    printf 'that intentionally exercise version-specific features.\n'
+    printf 'See "ptyunit help skip" for details.\n'
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 _dispatch() {
     local topic="${1:-}"

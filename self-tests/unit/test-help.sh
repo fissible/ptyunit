@@ -134,4 +134,33 @@ _hi_out=$(_help_install)
 assert_contains "$_hi_out" "bpkg"
 assert_contains "$_hi_out" "make test"
 
+# ── _help_skip ────────────────────────────────────────────────────────────────
+
+test_that "_help_skip exits 0 and mentions ptyunit_skip and ptyunit_require_bash"
+_hs_out=$(_help_skip)
+assert_eq "0" "$?"
+assert_contains "$_hs_out" "ptyunit_skip"
+assert_contains "$_hs_out" "ptyunit_require_bash"
+
+# ── _help_matrix ──────────────────────────────────────────────────────────────
+
+test_that "_help_matrix exits 0 and mentions docker/run-matrix.sh"
+_hm_out=$(_help_matrix)
+assert_eq "0" "$?"
+assert_contains "$_hm_out" "run-matrix.sh"
+assert_contains "$_hm_out" "Docker"
+
+# ── registry / function sync ──────────────────────────────────────────────────
+
+test_that "every topic in _TOPICS has a corresponding _help_<name> function"
+_i=0
+while (( _i < ${#_TOPICS[@]} )); do
+    _tname="${_TOPICS[$_i]}"
+    _fn="_help_${_tname//-/_}"
+    if ! declare -f "$_fn" >/dev/null 2>&1; then
+        assert_eq "function exists" "missing: $_fn"
+    fi
+    _i=$(( _i + 2 ))
+done
+
 ptyunit_test_summary
