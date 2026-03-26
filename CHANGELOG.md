@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+## [1.5.1] - 2026-03-26
+
+### Fixed
+- Thinner nav scrollbar, active item auto-scroll, subtle active style
+- Match main page scrollbar style to nav scrollbar
+- Case branch labels inherit hit status from first body line
+- _run_py_suite filter + bash 3.2 empty array + CI pytest install
 ## [1.5.0] - 2026-03-26
 
 ### Added
