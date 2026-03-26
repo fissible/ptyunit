@@ -84,7 +84,11 @@ _dispatch() {
     else
         printf 'ptyunit: unknown help topic "%s"\n' "$topic" >&2
         printf 'Run "ptyunit help" to see available topics.\n' >&2
-        exit 1
+        if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+            exit 1
+        else
+            return 1
+        fi
     fi
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # self-tests/unit/test-help.sh — Tests for help.sh infrastructure
 set -u
-PTYUNIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PTYUNIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 source "$PTYUNIT_DIR/assert.sh"
 source "$PTYUNIT_DIR/help.sh"
 
