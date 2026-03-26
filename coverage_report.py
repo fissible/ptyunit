@@ -31,6 +31,11 @@ _BRANCH_RE = re.compile(
     r'\bif\b|\belif\b|\bwhile\b|\bfor\b|\buntil\b|\bcase\b|\|\||\&\&'
 )
 
+# Matches a bash case branch label line — patterns separated by | followed by ).
+# Allows glob chars (*, ?, -, _, .) but excludes = (assignments) and $( (subshells).
+# Handles an optional trailing ;; for single-line branches like  pretty|tap|junit) ;;
+_CASE_LABEL_RE = re.compile(r'^[^=$(]*\)\s*(?:;;)?\s*$')
+
 _BASH_KEYWORDS = frozenset({
     'if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'do', 'done',
     'case', 'esac', 'in', 'function', 'return', 'local', 'export',
@@ -521,6 +526,27 @@ def parse_trace(trace_path: str, src_dir: str) -> dict:
     return dict(hits)
 
 
+def _apply_case_label_hits(executable: dict, file_hits: set) -> set:
+    """Return expanded hit set where case branch labels inherit coverage from
+    their first body line.
+
+    A case label on line N (e.g. ``-h|--help)``) is marked hit when the next
+    executable line after N is already in file_hits.  This reflects reality:
+    bash's PS4 tracer never emits a trace for the label itself, only for the
+    commands inside the branch.
+    """
+    exec_sorted = sorted(executable)
+    expanded = set(file_hits)
+    for idx, lineno in enumerate(exec_sorted):
+        if lineno in expanded:
+            continue
+        if not _CASE_LABEL_RE.match(executable[lineno]):
+            continue
+        if idx + 1 < len(exec_sorted) and exec_sorted[idx + 1] in file_hits:
+            expanded.add(lineno)
+    return expanded
+
+
 def compute_coverage(src_dir: str, hits: dict) -> list:
     """Compute per-file coverage stats."""
     results = []
@@ -530,7 +556,7 @@ def compute_coverage(src_dir: str, hits: dict) -> list:
         total = len(executable)
         if total == 0:
             continue
-        file_hits = hits.get(abs_path, set())
+        file_hits = _apply_case_label_hits(executable, hits.get(abs_path, set()))
         hit = len(file_hits & set(executable.keys()))
         missed = total - hit
         pct = round((hit / total * 100) if total > 0 else 0, 1)
