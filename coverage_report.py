@@ -785,14 +785,22 @@ _JS = r'''
 
 _INDEX_JS = r'''
 (function(){
+  var nav=document.querySelector('nav');
   var links=document.querySelectorAll('nav a');
   var iframe=document.querySelector('iframe[name="report"]');
   function mark(href){
     links.forEach(function(a){a.classList.toggle('active',a.getAttribute('href')===href)});
   }
-  if(iframe)mark(iframe.getAttribute('src'));
+  function scrollToActive(){
+    var active=document.querySelector('nav a.active');
+    if(active&&nav)nav.scrollLeft=active.offsetLeft-nav.clientWidth+active.offsetWidth+24;
+  }
+  if(iframe){mark(iframe.getAttribute('src'));scrollToActive();}
   links.forEach(function(a){
-    a.addEventListener('click',function(){mark(a.getAttribute('href'))});
+    a.addEventListener('click',function(){
+      mark(a.getAttribute('href'));
+      setTimeout(scrollToActive,0);
+    });
   });
 })();
 '''
@@ -1091,16 +1099,22 @@ def regenerate_index(coverage_dir: str) -> None:
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:'Cascadia Code','SF Mono','Fira Code',monospace;
      background:#111;color:#c8c8c8;display:flex;flex-direction:column;height:100vh}}
-nav{{background:#161616;border-bottom:1px solid #1e1e1e;padding:8px 14px;
-     overflow-x:auto;white-space:nowrap;flex-shrink:0}}
+nav{{
+  position:relative;background:#161616;border-bottom:1px solid #222;
+  padding:7px 14px;overflow-x:auto;white-space:nowrap;flex-shrink:0;
+  scrollbar-width:thin;scrollbar-color:#2a2a2a #161616;
+}}
+nav::-webkit-scrollbar{{height:3px}}
+nav::-webkit-scrollbar-track{{background:#161616}}
+nav::-webkit-scrollbar-thumb{{background:#2e2e2e;border-radius:2px}}
 nav a{{
   display:inline-block;color:#4e8cbf;text-decoration:none;
-  padding:4px 10px;margin-right:4px;border-radius:3px;
-  border:1px solid #242424;font-size:12px;font-family:inherit;
-  transition:background 0.1s,border-color 0.1s;
+  padding:3px 10px;margin-right:4px;border-radius:3px;
+  border:1px solid #222;font-size:11.5px;font-family:inherit;
+  transition:background 0.1s,border-color 0.1s,color 0.1s;
 }}
-nav a:hover{{background:#1e1e1e;color:#7aacdf}}
-nav a.active{{background:#1e2a38;border-color:#4e8cbf;color:#7aacdf}}
+nav a:hover{{background:#1c1c1c;border-color:#2e2e2e;color:#7aacdf}}
+nav a.active{{background:#1a2b3d;border-color:#3d6e9e;color:#8cc4f0;font-weight:500}}
 iframe{{flex:1;border:none;width:100%}}
 </style>
 </head><body>
