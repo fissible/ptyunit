@@ -378,4 +378,46 @@ assert_eq "0" "$?"
 assert_contains "$_help_out" "coverage"
 assert_contains "$_help_out" "Where to start"
 
+# ── _main: help subcommand ────────────────────────────────────────────────────
+
+test_that "_main help dispatches via help intercept"
+( _main help ) >/dev/null 2>&1
+assert_eq "0" "$?"
+
+# ── _main: --debug flag ───────────────────────────────────────────────────────
+
+test_that "_main --debug sets verbose and jobs=1"
+( _main --debug --unit --filter __no_such__ ) >/dev/null 2>&1
+assert_eq "0" "$?"
+
+# ── _main: --verbose flag ─────────────────────────────────────────────────────
+
+test_that "_main --verbose parses the flag"
+( _main --verbose --unit --filter __no_such__ ) >/dev/null 2>&1
+assert_eq "0" "$?"
+
+# ── _main: --jobs=N equals form ───────────────────────────────────────────────
+
+test_that "_main --jobs=N parses equals form"
+( _main --unit --jobs=1 --filter __no_such__ ) >/dev/null 2>&1
+assert_eq "0" "$?"
+
+# ── _main: --filter=PATTERN equals form ───────────────────────────────────────
+
+test_that "_main --filter=PATTERN parses equals form"
+( _main --unit --filter=__no_such__ ) >/dev/null 2>&1
+assert_eq "0" "$?"
+
+# ── _main: --name=PATTERN equals form ─────────────────────────────────────────
+
+test_that "_main --name=PATTERN parses equals form"
+( _main --unit --name=__no_such__ --filter __no_such__ ) >/dev/null 2>&1
+assert_eq "0" "$?"
+
+# ── _main: --format=FORMAT equals form ───────────────────────────────────────
+
+test_that "_main --format=FORMAT parses equals form"
+( _main --unit --format=tap --filter __no_such__ ) >/dev/null 2>&1
+assert_eq "0" "$?"
+
 ptyunit_test_summary

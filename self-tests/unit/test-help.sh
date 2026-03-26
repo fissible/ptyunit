@@ -163,4 +163,54 @@ while (( _i < ${#_TOPICS[@]} )); do
     _i=$(( _i + 2 ))
 done
 
+# ── _detect_install: brew and bpkg paths ──────────────────────────────────────
+
+test_that "_detect_install returns brew for Cellar path"
+_di_saved_dir="$PTYUNIT_DIR"
+PTYUNIT_DIR="/opt/homebrew/Cellar/ptyunit/1.5.0"
+assert_eq "brew" "$(_detect_install)"
+PTYUNIT_DIR="$_di_saved_dir"
+
+test_that "_detect_install returns bpkg for deps/ path"
+_di_saved_dir="$PTYUNIT_DIR"
+PTYUNIT_DIR="/home/user/project/deps/bpkg/ptyunit"
+assert_eq "bpkg" "$(_detect_install)"
+PTYUNIT_DIR="$_di_saved_dir"
+
+# ── _help_coverage: detected annotation ───────────────────────────────────────
+
+test_that "_help_coverage marks bpkg as detected when PTYUNIT_DIR is in deps/"
+_hcbpkg_saved_dir="$PTYUNIT_DIR"
+PTYUNIT_DIR="/home/user/project/deps/bpkg/ptyunit"
+_hcbpkg_out=$(_help_coverage)
+PTYUNIT_DIR="$_hcbpkg_saved_dir"
+assert_contains "$_hcbpkg_out" "bpkg  <- detected"
+
+test_that "_help_coverage marks Homebrew as detected when PTYUNIT_DIR is in Cellar"
+_hcbrew_saved_dir="$PTYUNIT_DIR"
+PTYUNIT_DIR="/opt/homebrew/Cellar/ptyunit/1.5.0"
+_hcbrew_out=$(_help_coverage)
+PTYUNIT_DIR="$_hcbrew_saved_dir"
+assert_contains "$_hcbrew_out" "Homebrew  <- detected"
+
+# ── _dispatch: known topic ────────────────────────────────────────────────────
+
+test_that "_dispatch calls topic function for a known topic"
+_dd_out=$(_dispatch "pty")
+assert_eq "0" "$?"
+assert_contains "$_dd_out" "pty"
+
+# ── _help_color_setup: FORCE_COLOR=1 ──────────────────────────────────────────
+
+test_that "_help_color_setup sets _BOLD when FORCE_COLOR=1"
+_hcs_saved_fc="${FORCE_COLOR:-}"
+_hcs_saved_nc="${NO_COLOR:-}"
+FORCE_COLOR=1
+NO_COLOR=""
+_help_color_setup
+_hcs_bold="$_BOLD"
+FORCE_COLOR="$_hcs_saved_fc"
+NO_COLOR="$_hcs_saved_nc"
+assert_not_eq "" "$_hcs_bold"
+
 ptyunit_test_summary
