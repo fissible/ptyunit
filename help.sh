@@ -171,7 +171,9 @@ _help_describe() {
     printf '      end_describe\n'
     printf '  end_describe\n\n'
     printf 'describe blocks are purely organisational — they prefix the label in\n'
-    printf 'output and in --name filtering. They do not affect test isolation.\n'
+    printf 'output and in --name filtering. Outer labels are prepended to inner\n'
+    printf 'test names, so a test inside nested describes appears as\n'
+    printf '"string utils > upper > converts lowercase" in output.\n'
     printf 'Nesting is supported; close each block with end_describe.\n'
 }
 
