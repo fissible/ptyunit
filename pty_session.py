@@ -4,7 +4,7 @@ Provides PTYSession — a context manager that runs a bash script in a PTY
 with pyte as the terminal emulator.  Test authors write .py files that
 assert on rendered screen state between keystrokes.
 
-Requires: pyte>=0.8.0  (pip install -r requirements-screen.txt)
+Requires: Python 3.9+, pyte>=0.8.0  (pip install -r requirements-screen.txt)
 
 Usage:
     from pty_session import PTYSession
@@ -201,22 +201,33 @@ class PTYSession:
         Raises TimeoutError if self._timeout is exceeded.
         Pure cursor moves do not set pyte's dirty set — only content renders
         reset the stability window, which is intentional.
+
+        The stability window does not start until the first byte of output
+        arrives, so a process that takes a moment to produce its first line
+        is not incorrectly declared stable on a blank screen.
         """
         window = window if window is not None else self._stable_window
-        deadline = time.time() + window
         hard_deadline = time.time() + self._timeout
+        first_byte_seen = False
+        deadline = None  # starts after first byte arrives
         while True:
             if time.time() >= hard_deadline:
                 raise TimeoutError("screen did not stabilize within timeout")
             self._pyte_screen.dirty.clear()
-            remaining = max(0.0, deadline - time.time())
+            if deadline is None:
+                remaining = max(0.0, hard_deadline - time.time())
+            else:
+                remaining = max(0.0, deadline - time.time())
             chunk = self._read_available(timeout=remaining)
             if chunk:
                 self._stream.feed(chunk)
                 self._raw_output += chunk
+                if not first_byte_seen:
+                    first_byte_seen = True
+                    deadline = time.time() + window
             if self._pyte_screen.dirty:
                 deadline = time.time() + window  # content changed — reset window
-            elif time.time() >= deadline:
+            elif deadline is not None and time.time() >= deadline:
                 break
             if self._eof:
                 break  # child closed slave — no more output coming
@@ -228,7 +239,10 @@ class PTYSession:
         This ensures exit_code is correct when a key causes the script to exit
         (e.g. ENTER on a confirm dialog).
         """
-        os.write(self._master_fd, parse_key(key))
+        try:
+            os.write(self._master_fd, parse_key(key))
+        except OSError:
+            pass  # child already exited; proceed to reap exit code
         self.wait_for_stable()
         result = os.waitpid(self._pid, os.WNOHANG)
         if result[0] != 0:
