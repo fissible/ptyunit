@@ -185,9 +185,47 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-26 (session 24)_
+_Last updated: 2026-03-26 (session 25)_
 
-**634/634 tests pass (624 bash + 10 Python). v1.5.1 current.**
+**643/643 tests pass (633 bash + 10 Python). v1.5.1 current. v1.5.2 ready to cut.**
+
+Completed 2026-03-26 (session 25 — hardening audit, all 10 bugs fixed):
+
+Full adversarial audit of all 5 components via Rubber Ducky room (`ptyunit-hardening`).
+10 GitHub issues (#22–#31) filed and all closed in this session.
+
+**assert.sh** (3 fixes, committed `a3b9b1c`):
+- #22 `assert_count` infinite loop on empty needle — guard added
+- #28 `ptyunit_skip_test` double-count on repeated calls — idempotency guard added
+- #25 `describe` stack corruption on names containing ` > ` — replaced delimited string with indexed array; join via explicit loop (IFS trick fails: `${array[*]}` only uses first char of IFS)
+
+**mock.sh** (1 fix, committed `c020b7d`):
+- #24 `assert_called_with` couldn't distinguish `'foo bar'` (1 arg) from `foo bar` (2 args) — switched to NUL-delimited storage (`printf '%s\0' "$@"`) and binary comparison (`cmp -s`)
+
+**pty_session.py** (2 fixes + docs, committed `36f02e6`):
+- #26 `send()` raises unhandled `OSError` if child already exited — wrapped in try/except
+- #27 `wait_for_stable` starts stability clock at fork time; blank screen declared stable if process slow to start — clock now starts after first byte arrives
+- #23 Python 3.9+ documented in docstring (`os.waitstatus_to_exitcode`)
+
+**pty_run.py** (docs, committed `5c2d9cb`):
+- #23 Python 3.9+ documented; numeric kill signals replaced with `signal.SIGTERM`/`SIGKILL`
+
+**run.sh** (3 fixes, committed `0ef4d2b`):
+- #29 Temp dirs leaked on SIGINT/SIGTERM — EXIT trap + `_all_work_dirs[]` registry added
+- #30 `mkfifo` failure caused unbounded parallelism — guard added in both `_run_suite` and `_run_py_suite`
+- #31 `--fail-fast` not checked between bash and Python suites in `--unit`/`--integration` modes — check added (was already correct in `--all`)
+
+**Decisions (from RD room):**
+- Mock arg format: NUL-delimited bytes, not space-separated (round-trip fidelity for args with spaces)
+- Python min version: 3.9 (document, don't add runtime check)
+- Stability algorithm: start clock after first byte (chosen over "wait for first content change")
+
+**Next steps:**
+1. **Cut v1.5.2** — `bash release.sh patch`. 6 commits since v1.5.1, all bug fixes. (PM decision — flag for `projects/`)
+2. **Submodule bumps**: shellframe, shellql, seed (pick up v1.5.1 now; v1.5.2 when cut) — flag for PM.
+3. `pty_session.py` still has no `PTYSession` behavioral self-tests (only `test_screen.py` covers the Screen wrapper). Worthwhile follow-up ticket.
+
+---
 
 Completed 2026-03-26 (session 24 — CI fix + v1.5.1 release):
 
