@@ -10,4 +10,4 @@ jobs:
   test:
     uses: fissible/.github/.github/workflows/test-bash.yml@main
     with:
-      bootstrap-command: pip3 install pytest
+      bootstrap-command: python3 -m pip install pytest pyte --break-system-packages
