@@ -25,6 +25,17 @@ set -u
 
 PTYUNIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
+# PTYUNIT_HOME: public variable pointing to the ptyunit installation.
+# Auto-detect from this script's directory if not already set.
+# Always export so test subshells can source assert.sh via $PTYUNIT_HOME.
+PTYUNIT_HOME="${PTYUNIT_HOME:-$PTYUNIT_DIR}"
+if [[ ! -f "$PTYUNIT_HOME/assert.sh" ]]; then
+    printf 'Error: PTYUNIT_HOME="%s" does not contain assert.sh\n' "$PTYUNIT_HOME" >&2
+    printf 'Set PTYUNIT_HOME to the ptyunit installation directory and export it.\n' >&2
+    exit 1
+fi
+export PTYUNIT_HOME
+
 # ── Parse arguments ──────────────────────────────────────────────────────────
 
 _cov_src=""

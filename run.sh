@@ -44,6 +44,17 @@ else
     TESTS_DIR="$(pwd)/tests"
 fi
 
+# PTYUNIT_HOME: public variable pointing to the ptyunit installation.
+# Auto-detect from this script's directory if not already set.
+# Always export so test subshells can source assert.sh via $PTYUNIT_HOME.
+PTYUNIT_HOME="${PTYUNIT_HOME:-$PTYUNIT_DIR}"
+if [[ ! -f "$PTYUNIT_HOME/assert.sh" ]]; then
+    printf 'Error: PTYUNIT_HOME="%s" does not contain assert.sh\n' "$PTYUNIT_HOME" >&2
+    printf 'Set PTYUNIT_HOME to the ptyunit installation directory and export it.\n' >&2
+    exit 1
+fi
+export PTYUNIT_HOME
+
 # ── Usage ─────────────────────────────────────────────────────────────────────
 _usage() {
     cat << USAGE
@@ -652,7 +663,7 @@ _main() {
                 _usage ;;
             --version)
                 printf 'ptyunit %s\n' "$PTYUNIT_VERSION"; exit 0 ;;
-            --unit|--integration|--all)
+                --unit|--integration|--all)
                 _mode="$1"; shift ;;
             --debug)
                 _jobs=1; _verbose=1; shift ;;
@@ -764,6 +775,10 @@ _main() {
     fi
 
     _fail_fast_triggered=0
+
+    if [[ "$_mode" == "--unit" ]]; then
+        printf 'Note: --unit skips integration tests; use --all for complete coverage.\n' >&2
+    fi
 
     case "$_mode" in
         --unit)

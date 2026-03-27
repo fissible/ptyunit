@@ -501,8 +501,12 @@ output, exit_code = run("my_menu.sh", ["DOWN", "ENTER"], key_delay=0.1)
 ## Code coverage
 
 ```bash
-bash tests/ptyunit/coverage.sh --unit --src=src
+bash tests/ptyunit/coverage.sh --all --src=src
 ```
+
+> **Use `--all`, not `--unit`.** `--unit` skips integration tests — coverage will appear artificially low (typically 10–15% lower) because lines exercised only through PTY/integration tests are reported as missed. `--all` is the correct baseline. `run.sh` will warn you on stderr if you pass `--unit`.
+
+> **Export `PTYUNIT_HOME`.** If you set `PTYUNIT_HOME` manually (e.g. in a Makefile), make sure to `export` it — a set-but-not-exported variable is invisible to test subprocesses. `run.sh` and `coverage.sh` auto-detect it from their own location if not set, so most users don't need to set it at all.
 
 Measures which lines of your source code actually ran during tests.
 
