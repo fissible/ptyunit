@@ -21,6 +21,7 @@ import pty
 import select
 import signal
 import struct
+import tempfile
 import termios
 import time
 
@@ -107,10 +108,33 @@ class PTYSession:
         self._raw_output = b""
         self._exit_code = None
         self._eof = False
+        self._prev_bash_env = None   # BASH_ENV value before coverage injection
+        self._bash_env_tmpfile = None  # tmpfile written for BASH_ENV injection
 
     def __enter__(self) -> "PTYSession":
         self._pyte_screen = pyte.Screen(self._cols, self._rows)
         self._stream = pyte.ByteStream(self._pyte_screen)
+
+        # Coverage injection: if PTYUNIT_COVERAGE_FILE is set, write a BASH_ENV
+        # startup script that enables PS4 xtrace into the trace file.
+        # Must happen before fork so the child inherits the updated BASH_ENV.
+        # BASH_XTRACEFD requires bash 4.1+; the guard prevents set -x from
+        # redirecting to stderr (fd 2) on bash 3.2, which would corrupt PTY output.
+        coverage_file = os.environ.get("PTYUNIT_COVERAGE_FILE")
+        if coverage_file:
+            self._prev_bash_env = os.environ.get("BASH_ENV")
+            fd, self._bash_env_tmpfile = tempfile.mkstemp(suffix=".sh")
+            with os.fdopen(fd, "w") as f:
+                f.write(
+                    f'exec 9>>"{coverage_file}"\n'
+                    "if [[ ${BASH_VERSINFO[0]} -ge 4 && ${BASH_VERSINFO[1]} -ge 1 ]]; then\n"
+                    "    export BASH_XTRACEFD=9\n"
+                    "    PS4='+${BASH_SOURCE:-?}:${LINENO} '\n"
+                    "    export PS4\n"
+                    "    set -x\n"
+                    "fi\n"
+                )
+            os.environ["BASH_ENV"] = self._bash_env_tmpfile
 
         self._pid, self._master_fd = pty.fork()
 
@@ -162,6 +186,18 @@ class PTYSession:
         if self._exit_code is None and self._pid is not None:
             try:
                 os.waitpid(self._pid, 0)
+            except OSError:
+                pass
+
+        # Restore BASH_ENV BEFORE tmpfile cleanup: an exception in os.unlink
+        # must not leave the parent process environment dirty.
+        if self._bash_env_tmpfile is not None:
+            if self._prev_bash_env is None:
+                os.environ.pop("BASH_ENV", None)
+            else:
+                os.environ["BASH_ENV"] = self._prev_bash_env
+            try:
+                os.unlink(self._bash_env_tmpfile)
             except OSError:
                 pass
 
