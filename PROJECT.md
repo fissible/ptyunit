@@ -185,37 +185,30 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-26 (session 28)_
+_Last updated: 2026-03-26 (session 29)_
 
-**625/625 assertions pass (unit). v1.5.1 current. v1.5.2 ready to cut.**
+**617/617 assertions pass (unit). v1.5.2 current. Hardening complete.**
 
 ---
 
 ### Next session: pick up here
 
-**State:** All 14 issues from the hardening audit (#22–#35) are closed. No open tickets.
+**State:** All hardening-complete issues (#36–#38) are closed. No open tickets.
 
-**Completed this session (session 28):**
+**Completed this session (session 29):**
 
 | What | Detail |
 |------|--------|
-| `coverage.sh` `--unit` warning | Added missing stderr note (`f0b1256`). `run.sh` had the warning since #35; `coverage.sh` was missing it. |
+| CI pytest fix | `ci.yml` + `test.yml`: use `python3 -m pip install pytest pyte --break-system-packages` — `pip3 install` was not reaching `/usr/bin/python3` on Ubuntu 24.04 runners (`4842c26`) |
+| [#37](https://github.com/fissible/ptyunit/issues/37) PTYSession behavioral self-tests | `self-tests/unit/test_pty_session.py` — 8 tests: stdout after entry, first-byte semantics, exit_code, no-zombie, fd close, send() OSError swallow, timeout |
+| [#38](https://github.com/fissible/ptyunit/issues/38) Docker matrix CI | `test.yml` pytest/pyte install in Alpine unit matrix + ubuntu integration job (`a7d46a5`) |
+| [#36](https://github.com/fissible/ptyunit/issues/36) Hostile-environment test suite | `self-tests/hostile/` — 5 scenarios, `run-hostile.sh`, `hostile.yml` weekly CI, `ptyunit help pty` docs (`f498919`) |
 
-All 4 ptyunit quality-improvement tickets (#32–#35) were confirmed complete this session (shipped in session 27). Session 28 closed the last gap.
+**Hardening complete path: DONE.** All issues #22–#38 closed.
 
-**v1.5.2:** `bash release.sh patch` — 11 commits since v1.5.1, all bug fixes and reliability improvements. PM decision required; flag for `projects/`.
+**Next: cut v1.5.3** — `bash release.sh patch`. 4 commits since v1.5.2 (CI fixes + test additions). PM decision required; flag for `projects/`.
 
-**Consumer install model:** shellframe, shellql, and seed use the **Homebrew-installed** ptyunit (not a git submodule). No submodule bumps needed. When v1.5.2 is cut and the Homebrew tap is updated, consumers pick it up automatically on their next CI run. Consumer CI passing = real-world validation.
-
-**"Hardening complete" path:** three issues remain open:
-
-| # | Title | Effort |
-|---|-------|--------|
-| [#36](https://github.com/fissible/ptyunit/issues/36) | Hostile-environment stability test suite | M |
-| [#37](https://github.com/fissible/ptyunit/issues/37) | PTYSession behavioral self-tests | S |
-| [#38](https://github.com/fissible/ptyunit/issues/38) | Docker matrix in GitHub Actions (bash 3.2–5.x) | S |
-
-Plus: cut v1.5.2, update Homebrew tap, confirm consumer CIs pass (PM coordinates).
+**Consumer install model:** shellframe, shellql, and seed use the **Homebrew-installed** ptyunit. No submodule bumps needed. When v1.5.3 is cut and the Homebrew tap is updated, consumers pick it up automatically.
 
 **Other backlog:**
 
