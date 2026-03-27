@@ -187,13 +187,13 @@ ptyunit/
 
 _Last updated: 2026-03-26 (session 29)_
 
-**617/617 assertions pass (unit). v1.5.2 current. Hardening complete.**
+**617/617 assertions pass (unit). v1.5.3 current. Hardening complete. Consumer validated.**
 
 ---
 
 ### Next session: pick up here
 
-**State:** All hardening-complete issues (#36–#38) are closed. No open tickets.
+**State:** All hardening-complete issues (#36–#38) closed. v1.5.3 released. No open tickets.
 
 **Completed this session (session 29):**
 
@@ -203,10 +203,12 @@ _Last updated: 2026-03-26 (session 29)_
 | [#37](https://github.com/fissible/ptyunit/issues/37) PTYSession behavioral self-tests | `self-tests/unit/test_pty_session.py` — 8 tests: stdout after entry, first-byte semantics, exit_code, no-zombie, fd close, send() OSError swallow, timeout |
 | [#38](https://github.com/fissible/ptyunit/issues/38) Docker matrix CI | `test.yml` pytest/pyte install in Alpine unit matrix + ubuntu integration job (`a7d46a5`) |
 | [#36](https://github.com/fissible/ptyunit/issues/36) Hostile-environment test suite | `self-tests/hostile/` — 5 scenarios, `run-hostile.sh`, `hostile.yml` weekly CI, `ptyunit help pty` docs (`f498919`) |
+| v1.5.3 released | `bash release.sh patch`. Homebrew tap bumped (`85451a2`). |
+| Consumer validation | shellframe generated coverage report successfully on v1.5.3 — real-world signal clean. |
 
 **Hardening complete path: DONE.** All issues #22–#38 closed.
 
-**Next: cut v1.5.3** — `bash release.sh patch`. 4 commits since v1.5.2 (CI fixes + test additions). PM decision required; flag for `projects/`.
+**Next work:** backlog only — no open hardening tickets.
 
 **Consumer install model:** shellframe, shellql, and seed use the **Homebrew-installed** ptyunit. No submodule bumps needed. When v1.5.3 is cut and the Homebrew tap is updated, consumers pick it up automatically.
 
