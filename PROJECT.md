@@ -185,15 +185,41 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-26 (session 27)_
+_Last updated: 2026-03-26 (session 28)_
 
-**662/662 tests pass (647 bash + 15 Python). v1.5.1 current. v1.5.2 ready to cut.**
+**625/625 assertions pass (unit). v1.5.1 current. v1.5.2 ready to cut.**
 
 ---
 
 ### Next session: pick up here
 
 **State:** All 14 issues from the hardening audit (#22–#35) are closed. No open tickets.
+
+**Completed this session (session 28):**
+
+| What | Detail |
+|------|--------|
+| `coverage.sh` `--unit` warning | Added missing stderr note (`f0b1256`). `run.sh` had the warning since #35; `coverage.sh` was missing it. |
+
+All 4 ptyunit quality-improvement tickets (#32–#35) were confirmed complete this session (shipped in session 27). Session 28 closed the last gap.
+
+**v1.5.2:** `bash release.sh patch` — 11 commits since v1.5.1, all bug fixes and reliability improvements. PM decision required; flag for `projects/`.
+
+**Submodule bumps needed:** shellframe, shellql, seed — flag for PM.
+
+**No open tickets.** Next work items from backlog same as session 27:
+
+| # | Feature | Effort |
+|---|---------|--------|
+| 12 | Per-test coverage capture | M |
+| 14 | Redundancy detection | L |
+| — | `PTYSession` behavioral self-tests (no direct tests exist, only `test_screen.py`) | S |
+| — | CI workflow (GitHub Actions) for ptyunit itself | S |
+| — | `run` helper: capture stdout+stderr+exit in one call | S |
+
+---
+
+### Session 27 (archived)
 
 **Completed this session (session 27):**
 
@@ -203,20 +229,6 @@ _Last updated: 2026-03-26 (session 27)_
 | [#34](https://github.com/fissible/ptyunit/issues/34) | `BASH_ENV` coverage injection in `PTYSession.__enter__`; bash 4.1+ guard; exception-safe restore order; 6 unit tests incl. Breaker pass |
 | [#33](https://github.com/fissible/ptyunit/issues/33) | `PTYUNIT_HOME` auto-export in `run.sh` + `coverage.sh`; invalid-path error |
 | [#35](https://github.com/fissible/ptyunit/issues/35) | `--unit` stderr warning; README coverage guide updated |
-
-**v1.5.2:** `bash release.sh patch` — 10 commits since v1.5.1, all bug fixes and reliability improvements. PM decision required; flag for `projects/`.
-
-**Submodule bumps needed:** shellframe, shellql, seed — flag for PM.
-
-**No open tickets.** Next work items from backlog:
-
-| # | Feature | Effort |
-|---|---------|--------|
-| 12 | Per-test coverage capture | M |
-| 14 | Redundancy detection | L |
-| — | `PTYSession` behavioral self-tests (no direct tests exist, only `test_screen.py`) | S |
-| — | CI workflow (GitHub Actions) for ptyunit itself | S |
-| — | `run` helper: capture stdout+stderr+exit in one call | S |
 
 ---
 
