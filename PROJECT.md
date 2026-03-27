@@ -49,7 +49,7 @@ independent layers that work together or standalone:
 
 ## Current state
 
-**Self-tests:** 643/643 assertions across 27 files (633 bash + 10 Python). v1.5.1 current.
+**Self-tests:** 662/662 assertions across 32 files (647 bash + 15 Python). v1.5.1 current.
 
 **Core files:**
 
@@ -185,61 +185,38 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-26 (session 26)_
+_Last updated: 2026-03-26 (session 27)_
 
-**643/643 tests pass (633 bash + 10 Python). v1.5.1 current. v1.5.2 ready to cut.**
+**662/662 tests pass (647 bash + 15 Python). v1.5.1 current. v1.5.2 ready to cut.**
 
 ---
 
 ### Next session: pick up here
 
-**State:** All 10 hardening issues (#22–#31) are closed. Four follow-on issues have been filed and are ready for implementation. No code has been written for them yet.
+**State:** All 14 issues from the hardening audit (#22–#35) are closed. No open tickets.
 
-**Implementation order (dependency-first, confirmed by RD):**
+**Completed this session (session 27):**
 
-| Priority | Issue | Title | Effort | Risk | Notes |
-|----------|-------|--------|--------|------|-------|
-| 1 | [#32](https://github.com/fissible/ptyunit/issues/32) | Stable waiting in `pty_run.py` | M | medium | Start here; PTY code is warm |
-| 2 | [#34](https://github.com/fissible/ptyunit/issues/34) | `BASH_ENV` coverage injection in `pty_session.py` | S | **HIGH** | Do while PTY code still warm |
-| 3 | [#33](https://github.com/fissible/ptyunit/issues/33) | Auto-export `PTYUNIT_HOME`, fail loud | S | low | Bundle with #35 |
-| 3 | [#35](https://github.com/fissible/ptyunit/issues/35) | Docs: `--all` vs `--unit`, `PTYUNIT_HOME` export | XS | low | Same commit as #33 |
+| Issue | What shipped |
+|-------|-------------|
+| [#32](https://github.com/fissible/ptyunit/issues/32) | `_drain_until_stable()` in `pty_run.py`; first-byte gate + hard deadline; 5 unit tests incl. both Evidence Mode adversarial tests |
+| [#34](https://github.com/fissible/ptyunit/issues/34) | `BASH_ENV` coverage injection in `PTYSession.__enter__`; bash 4.1+ guard; exception-safe restore order; 6 unit tests incl. Breaker pass |
+| [#33](https://github.com/fissible/ptyunit/issues/33) | `PTYUNIT_HOME` auto-export in `run.sh` + `coverage.sh`; invalid-path error |
+| [#35](https://github.com/fissible/ptyunit/issues/35) | `--unit` stderr warning; README coverage guide updated |
 
-**Room sync protocol (new — required for all 4 tickets):**
-- Post "starting X" to the room BEFORE touching code
-- Post diff/findings BEFORE moving to the next ticket
-- One-message lag acceptable; multi-ticket retroactive debriefs are not
+**v1.5.2:** `bash release.sh patch` — 10 commits since v1.5.1, all bug fixes and reliability improvements. PM decision required; flag for `projects/`.
 
-**v1.5.2:** `bash release.sh patch` — 6 commits since v1.5.1, all bug fixes. PM decision required; flag for `projects/`.
+**Submodule bumps needed:** shellframe, shellql, seed — flag for PM.
 
----
+**No open tickets.** Next work items from backlog:
 
-**#32 design (approved by RD, ready to implement):**
-
-Add `_drain_until_stable(fd, window=0.05, timeout=10.0)` to `pty_run.py`:
-- `first_byte_seen = False; deadline = time.monotonic() + timeout`
-- Block on `select.select([fd], [], [], remaining)` until first byte arrives
-- After first byte, start stability window; reset on each non-empty read
-- Return when quiet for `window` seconds OR deadline exceeded (not an error — deadline is best-effort)
-- Replace `time.sleep(PTY_INIT)` with `_drain_until_stable(fd)`
-- Replace `time.sleep(PTY_DELAY)` in keypress loop with `_drain_until_stable(fd)`
-- Default-on (not opt-in); `timeout` configurable via env var; `window` hardcoded default
-
-Evidence Mode holds — two adversarial tests required before sign-off:
-1. Script that sleeps 200ms before first output → confirms first-byte gate fires correctly
-2. Continuously-outputting script (2s) → confirms hard deadline fires without hanging
-
-**#34 design (high-risk, requires Breaker pass before sign-off):**
-- `__enter__`: stash `_prev_bash_env = os.environ.get('BASH_ENV')`; inject BASH_ENV only when `PTYUNIT_COVERAGE_FILE` is set
-- `__exit__`: restore `_prev_bash_env` BEFORE tmpfile cleanup (exception during cleanup must not leave env dirty)
-- Injected script must include bash 4.1+ guard: `[[ ${BASH_VERSINFO[0]} -ge 4 && ${BASH_VERSINFO[1]} -ge 1 ]] && export BASH_XTRACEFD=9`
-- Breaker pass required: test (a) nested PTYSession objects, (b) exception in `__exit__` before restore, (c) bash 3.2 subprocess behavior
-
-**Process decisions (locked, survive compaction):**
-- Evidence Mode: each timing/stability claim must be explicitly flagged as "local validation only" or "adversarial test exists" — unvalidated claims are holds, not sign-offs
-- Ticket 3 / #34 is HIGH RISK despite S effort: `BASH_ENV` mutation that leaks = flaky tests, hard to bisect
-- v1.5.2 framing: "phase 1 audit done, known issues fixed" — NOT "hardening complete"; hostile-environment validation is follow-on work
-
-**Rubber Ducky room:** `ptyunit-hardening` archived at `~/.config/rubber-ducky/archive/2026-03-26-ptyunit-hardening/`. Open a new room if continuing with these tickets.
+| # | Feature | Effort |
+|---|---------|--------|
+| 12 | Per-test coverage capture | M |
+| 14 | Redundancy detection | L |
+| — | `PTYSession` behavioral self-tests (no direct tests exist, only `test_screen.py`) | S |
+| — | CI workflow (GitHub Actions) for ptyunit itself | S |
+| — | `run` helper: capture stdout+stderr+exit in one call | S |
 
 ---
 
