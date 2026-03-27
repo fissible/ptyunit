@@ -73,6 +73,10 @@ _cov_trace=$(mktemp "${TMPDIR:-/tmp}/ptyunit-coverage.XXXXXX")
 trap "rm -f '$_cov_trace'" EXIT
 export PTYUNIT_COVERAGE_FILE="$_cov_trace"
 
+if [[ "$_cov_mode" == "--unit" ]]; then
+    printf 'Note: --unit skips integration tests; use --all for complete coverage.\n' >&2
+fi
+
 printf 'ptyunit coverage\n'
 printf '  source: %s\n' "$_cov_src"
 printf '  trace:  %s\n\n' "$_cov_trace"
