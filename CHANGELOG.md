@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+## [1.5.2] - 2026-03-27
+
+### Added
+- Replace fixed-delay waiting with output-stable waiting (#32)
+- BASH_ENV coverage injection in PTYSession.__enter__ (#34)
+- Auto-export PTYUNIT_HOME; warn on --unit (#33 #35)
+- Warn on stderr when --unit skips integration tests
+
+### Fixed
+- Three correctness bugs in assert.sh
+- NUL-delimited arg recording in assert_called_with (#24)
+- OSError guard in send(), stability clock after first byte, Python 3.9+ note (#26 #27 #23)
+- EXIT trap for temp dir cleanup, mkfifo guard, fail-fast between suites (#29 #30 #31)
 ## [1.5.1] - 2026-03-26
 
 ### Fixed
