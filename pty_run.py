@@ -110,6 +110,52 @@ def _drain(fd: int, timeout: float = 0.05) -> bytes:
     return buf
 
 
+def _drain_until_stable(fd: int, window: float = 0.05, timeout: float = 10.0) -> bytes:
+    """Read until output is stable (quiet for window seconds) or timeout expires.
+
+    'Stable' means no new bytes have arrived for *window* seconds after the
+    first byte was received.  The stability clock does NOT start until the
+    first byte arrives — this prevents a blank-screen false-positive when the
+    child process starts slowly.
+
+    Reaching *timeout* before any output is not an error; the function returns
+    whatever bytes it collected (possibly empty).
+
+    Requires: Python 3.9+
+    """
+    buf = b""
+    first_byte_seen = False
+    deadline = time.monotonic() + timeout
+
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+
+        # Before the first byte: wait up to the full remaining deadline.
+        # After the first byte: wait only the stability window (or remaining,
+        # whichever is shorter) so we don't overshoot the deadline.
+        wait = min(window, remaining) if first_byte_seen else remaining
+
+        r, _, _ = select.select([fd], [], [], wait)
+        if not r:
+            # Timed out: stability window expired (stable) or deadline hit.
+            break
+
+        try:
+            chunk = os.read(fd, 4096)
+        except OSError:
+            break
+
+        if not chunk:  # EOF
+            break
+
+        buf += chunk
+        first_byte_seen = True
+
+    return buf
+
+
 def run(
     script: str,
     keys: list,
@@ -172,9 +218,10 @@ def run(
 
         output = b""
 
-        # Let the script start and render its initial UI
-        time.sleep(init_delay)
-        output += _drain(master)
+        # Wait for the script to render its initial UI.  The stability window
+        # (50 ms quiet) replaces the fixed PTY_INIT sleep; init_delay is no
+        # longer used but kept in the signature for backward compatibility.
+        output += _drain_until_stable(master, timeout=timeout)
 
         # Send keystrokes one at a time
         for key in keys:
@@ -186,8 +233,8 @@ def run(
                 os.write(master, parse_key(key))
             except OSError:
                 break
-            time.sleep(key_delay)
-            output += _drain(master)
+            # PTY_DELAY is now the maximum wait per key, not a fixed sleep.
+            output += _drain_until_stable(master, timeout=key_delay)
 
         # Wait for the child to exit (up to timeout)
         deadline = time.time() + timeout
