@@ -205,16 +205,24 @@ All 4 ptyunit quality-improvement tickets (#32–#35) were confirmed complete th
 
 **v1.5.2:** `bash release.sh patch` — 11 commits since v1.5.1, all bug fixes and reliability improvements. PM decision required; flag for `projects/`.
 
-**Submodule bumps needed:** shellframe, shellql, seed — flag for PM.
+**Consumer install model:** shellframe, shellql, and seed use the **Homebrew-installed** ptyunit (not a git submodule). No submodule bumps needed. When v1.5.2 is cut and the Homebrew tap is updated, consumers pick it up automatically on their next CI run. Consumer CI passing = real-world validation.
 
-**No open tickets.** Next work items from backlog same as session 27:
+**"Hardening complete" path:** three issues remain open:
+
+| # | Title | Effort |
+|---|-------|--------|
+| [#36](https://github.com/fissible/ptyunit/issues/36) | Hostile-environment stability test suite | M |
+| [#37](https://github.com/fissible/ptyunit/issues/37) | PTYSession behavioral self-tests | S |
+| [#38](https://github.com/fissible/ptyunit/issues/38) | Docker matrix in GitHub Actions (bash 3.2–5.x) | S |
+
+Plus: cut v1.5.2, update Homebrew tap, confirm consumer CIs pass (PM coordinates).
+
+**Other backlog:**
 
 | # | Feature | Effort |
 |---|---------|--------|
 | 12 | Per-test coverage capture | M |
 | 14 | Redundancy detection | L |
-| — | `PTYSession` behavioral self-tests (no direct tests exist, only `test_screen.py`) | S |
-| — | CI workflow (GitHub Actions) for ptyunit itself | S |
 | — | `run` helper: capture stdout+stderr+exit in one call | S |
 
 ---
