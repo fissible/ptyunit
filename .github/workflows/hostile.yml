@@ -1,0 +1,19 @@
+name: Hostile tests
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'   # weekly, Sunday 03:00 UTC
+  workflow_dispatch:        # allow manual trigger
+
+jobs:
+  hostile:
+    name: Hostile-environment stability tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          python3 -m pip install pytest pyte --break-system-packages
+          sudo apt-get install -y cpulimit
+      - name: Run hostile tests
+        run: bash run-hostile.sh

@@ -123,6 +123,11 @@ _help_pty() {
     printf 'Keys: UP, DOWN, LEFT, RIGHT, ENTER, ESC, BACKSPACE, TAB, or any char.\n'
     printf 'Output has ANSI escape codes stripped automatically.\n'
     printf 'Requires Python 3 and a PTY-capable OS (Linux, macOS).\n'
+    printf '\nHostile-environment stability tests (timing stress, adversarial output):\n\n'
+    printf '  bash run-hostile.sh\n\n'
+    printf 'Scenarios: slow start (1.5s delay), mid-render pause, jittery output\n'
+    printf '(500 bytes at 1ms/byte), throttled CPU (cpulimit, Linux), deadline exceeded.\n'
+    printf 'Not in the default suite. CI: hostile.yml runs weekly on Linux.\n'
 }
 
 _help_mocking() {
