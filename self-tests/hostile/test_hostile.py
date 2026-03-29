@@ -108,10 +108,20 @@ def test_jittery_output_all_bytes_received():
 
 @pytest.mark.skipif(_cpulimit is None, reason="cpulimit not installed")
 def test_throttled_cpu_output_not_missed(tmp_path):
-    """Throttled CPU: first-byte gate holds while cpu-work.sh runs under cpulimit."""
+    """Throttled CPU: first-byte gate holds while cpu-work.sh runs under cpulimit.
+
+    The wrapper does NOT use 'exec cpulimit' because cpulimit 3.0 closes inherited
+    fds before forking its child, which causes immediate EOF on the PTY master.
+    Instead, the wrapper bash stays alive (holding the PTY slave) and saves the
+    original stdout as fd 3. The cpulimit child restores stdout from fd 3 before
+    exec'ing cpu-work.sh, so output arrives on the PTY even if cpulimit closes fd 1.
+    """
     cpu_work = os.path.join(_D, "cpu-work.sh")
     wrapper = tmp_path / "throttled.sh"
-    wrapper.write_text(f'exec cpulimit -l 10 -q -- bash "{cpu_work}"\n')
+    wrapper.write_text(
+        f'exec 3>&1\n'
+        f'cpulimit -l 10 -q -- bash -c \'exec 1>&3 3>&-; exec bash "{cpu_work}"\'\n'
+    )
     with PTYSession(str(wrapper), timeout=30.0) as session:
         assert "computed:" in session.stdout, (
             f"Expected 'computed:' in output — got: {session.stdout!r}\n"

@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install python3 and pytest
-        run: apk add --no-cache python3 py3-pip && pip3 install pytest pyte
+        run: apk add --no-cache python3 py3-pip && pip3 install pytest pyte --break-system-packages
       - name: Run unit tests
         run: bash run.sh --unit
       - name: Run unit tests (TAP output)

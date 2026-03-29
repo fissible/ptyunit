@@ -64,7 +64,11 @@ def test_drain_until_stable_returns_empty_on_immediate_eof():
 
 
 def test_drain_until_stable_collects_multiple_bursts():
-    """Multiple bursts separated by gaps shorter than window — returns all bytes."""
+    """Multiple bursts separated by gaps shorter than window — returns all bytes.
+
+    Uses window=0.15 so that macOS timer imprecision (sleep(0.02) can expand to
+    ~60ms on macOS runners) does not cause a false stability timeout between bursts.
+    """
     r, w = os.pipe()
 
     def write_bursts(write_fd):
@@ -77,7 +81,7 @@ def test_drain_until_stable_collects_multiple_bursts():
 
     t = threading.Thread(target=write_bursts, args=(w,))
     t.start()
-    result = _drain_until_stable(r, window=0.05, timeout=2.0)
+    result = _drain_until_stable(r, window=0.15, timeout=2.0)
     t.join()
     os.close(r)
     assert result == b"firstsecondthird"
