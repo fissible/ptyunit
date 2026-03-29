@@ -99,34 +99,23 @@ def test_jittery_output_all_bytes_received():
         )
 
 
-# ── Scenario 4: throttled CPU ─────────────────────────────────────────────────
-# The bash computation script runs under cpulimit -l 10 (10% CPU cap), making
-# the process take ~10x longer before producing output. The first-byte gate
-# must not declare stable during the computation.
+# ── Scenario 4: slow CPU computation ─────────────────────────────────────────
+# cpu-work.sh runs a 500k-iteration bash arithmetic loop, taking several seconds
+# on a typical CI runner before producing any output.  The first-byte gate must
+# not declare stable during the silent computation window.
 #
-# Skipped when cpulimit is not installed (Linux CI installs it via apt-get).
+# Note: cpulimit was originally used here to throttle CPU to 10%, but cpulimit
+# 3.0 closes all inherited fds before forking its child, causing immediate PTY
+# EOF regardless of wrapper tricks.  Running cpu-work.sh directly with a larger
+# loop achieves the same hostile condition without the fd-inheritance problem.
 
-@pytest.mark.skipif(_cpulimit is None, reason="cpulimit not installed")
-def test_throttled_cpu_output_not_missed(tmp_path):
-    """Throttled CPU: first-byte gate holds while cpu-work.sh runs under cpulimit.
-
-    The wrapper does NOT use 'exec cpulimit' because cpulimit 3.0 closes inherited
-    fds before forking its child, which causes immediate EOF on the PTY master.
-    Instead, the wrapper bash stays alive (holding the PTY slave) and saves the
-    original stdout as fd 3. The cpulimit child restores stdout from fd 3 before
-    exec'ing cpu-work.sh, so output arrives on the PTY even if cpulimit closes fd 1.
-    """
-    cpu_work = os.path.join(_D, "cpu-work.sh")
-    wrapper = tmp_path / "throttled.sh"
-    wrapper.write_text(
-        f'exec 3>&1\n'
-        f'cpulimit -l 10 -q -- bash -c \'exec 1>&3 3>&-; exec bash "{cpu_work}"\'\n'
-    )
-    with PTYSession(str(wrapper), timeout=30.0) as session:
+def test_slow_cpu_output_not_missed():
+    """Slow CPU computation: first-byte gate holds during multi-second arithmetic."""
+    with PTYSession(os.path.join(_D, "cpu-work.sh"), timeout=60.0) as session:
         assert "computed:" in session.stdout, (
             f"Expected 'computed:' in output — got: {session.stdout!r}\n"
             "Possible regression: stability clock started before first byte "
-            "of throttled output arrived."
+            "of slow computation arrived."
         )
 
 
