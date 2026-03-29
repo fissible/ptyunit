@@ -12,8 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: |
-          python3 -m pip install pytest pyte --break-system-packages
-          sudo apt-get install -y cpulimit
+        run: python3 -m pip install pytest pyte --break-system-packages
       - name: Run hostile tests
         run: bash run-hostile.sh
