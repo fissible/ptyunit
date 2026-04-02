@@ -588,6 +588,36 @@ your-project/
 
 ---
 
+## In the wild
+
+Someone posted a bash TUI password generator on Reddit — ~1,000 lines, no tests. We ran it through ptyunit to see what would happen.
+
+The tool had two modes: CLI flags for scripting, and a full interactive TUI with keyboard navigation, password history, language switching, and a DB-safe mode. Without PTY support, only the CLI side is reachable.
+
+**What ptyunit found:**
+
+A flag-ordering bug where `-d` (DB-safe) and `-s` (simple/alphanumeric) silently conflict depending on which comes first — the output is labeled "DB-safe" but contains no DB-safe characters. A crash when `-l` is passed without a value, caused by `shift 2` tripping over `set -euo pipefail`. And a bash 4.3 compatibility issue in the history tracking code, which would only manifest interactively.
+
+The PTY tests covered the rest — history navigation, mode toggles, the help screen, the language selection menu driven by arrow keys. None of that is reachable from a standard test framework.
+
+```bash
+test_that "DB-safe flag wins regardless of flag order"
+run passgen -d -s -l 24 -q
+assert_match '[_.\-]' "$output"   # should contain DB-safe specials
+
+test_that "R key enables DB-safe mode in TUI"
+out=$(python3 pty_run.py passgen R q)
+assert_contains "$out" "DB-safe"
+
+test_that "history navigation shows correct position"
+out=$(python3 pty_run.py passgen r r r '<' q)
+assert_contains "$out" "2/3"
+```
+
+Two additional bugs were found by code review alone — a platform incompatibility with macOS's default `grep` and a SIGPIPE hazard in a `tr | head -c` pipeline. Those aren't things any test framework catches; they need a code fix. Everything else, ptyunit had.
+
+---
+
 ## How does it compare?
 
 | Capability | ptyunit | [bats-core](https://github.com/bats-core/bats-core) | [shellspec](https://github.com/shellspec/shellspec) | [shunit2](https://github.com/kward/shunit2) |
