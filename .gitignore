@@ -2,3 +2,7 @@ __pycache__/
 coverage/
 .claude/
 *.json-e
+.tome.db
+.tome.db-shm
+.tome.db-wal
+.cymbal.db
