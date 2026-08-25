@@ -176,14 +176,29 @@ end_describe() {
 # A test_that section is created for each row, named after the callback
 # and the raw parameter line.
 # Lines starting with # are skipped.
+#
+# Fields are split on a single character (default `|`) with no escaping —
+# a value cannot contain the separator. For values with pipes (JSON, sed
+# programs, regexes) pick another separator: `--sep $'\t'` or `--sep ,`.
+# A trailing empty field is dropped (`a|b|` → 2 params), so a row whose
+# last value is empty needs a placeholder.
 
 test_each() {
+    local _ptyunit_sep='|'
+    if [[ "${1:-}" == "--sep" ]]; then
+        _ptyunit_sep="${2:-}"
+        if (( ${#_ptyunit_sep} != 1 )); then
+            printf 'test_each: --sep must be a single character, got %q\n' "$_ptyunit_sep" >&2
+            return 2
+        fi
+        shift 2
+    fi
     local callback="$1"
     local _ptyunit_pline
     while IFS= read -r _ptyunit_pline || [[ -n "$_ptyunit_pline" ]]; do
         [[ -z "$_ptyunit_pline" || "$_ptyunit_pline" == \#* ]] && continue
         local _ptyunit_params=()
-        IFS='|' read -ra _ptyunit_params <<< "$_ptyunit_pline"
+        IFS="$_ptyunit_sep" read -ra _ptyunit_params <<< "$_ptyunit_pline"
         ptyunit_test_begin "$callback (${_ptyunit_pline})"
         "$callback" "${_ptyunit_params[@]}"
     done
@@ -462,6 +477,54 @@ assert_le() {
         _ptyunit_report_fail "$msg" "$(printf '  expected: %s <= %s' "$actual" "$threshold")"
     fi
 }
+
+# ── Float comparisons ────────────────────────────────────────────────────────
+# Decimal or scientific notation (1.5, -2, .25, 1e-3). Compared with awk
+# (POSIX — no bc needed). Non-numeric input is a FAIL, never a silent pass.
+#
+# Usage:
+#   assert_float_eq actual expected [tolerance=1e-9] [msg]
+#   assert_float_gt actual threshold [msg]     (also _lt, _ge, _le)
+
+_ptyunit_is_number() {
+    [[ "$1" =~ ^[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$ ]]
+}
+
+# Shared driver: _ptyunit_float_assert <op> <a> <b> <tol> <msg> <symbol>
+_ptyunit_float_assert() {
+    (( _PTYUNIT_SKIP_CURRENT )) && return
+    local op="$1" a="$2" b="$3" tol="$4" msg="$5" sym="$6"
+    local _x
+    for _x in "$a" "$b" "$tol"; do
+        if ! _ptyunit_is_number "$_x"; then
+            # @pty_skip
+            _ptyunit_report_fail "$msg" "$(printf '  not a number: %q' "$_x")"
+            return
+        fi
+    done
+    if awk -v a="$a" -v b="$b" -v t="$tol" -v op="$op" 'BEGIN {
+            a += 0; b += 0; t += 0
+            if      (op == "eq") ok = (a - b <= t && b - a <= t)
+            else if (op == "gt") ok = (a > b)
+            else if (op == "lt") ok = (a < b)
+            else if (op == "ge") ok = (a >= b)
+            else                 ok = (a <= b)
+            exit !ok }'; then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        # @pty_skip
+        _ptyunit_report_fail "$msg" "$(printf '  expected: %s %s %s' "$a" "$sym" "$b")"
+    fi
+}
+
+assert_float_eq() {
+    local tol="${3:-1e-9}"
+    _ptyunit_float_assert eq "$1" "$2" "$tol" "${4:-}" "≈ (±$tol)"
+}
+assert_float_gt() { _ptyunit_float_assert gt "$1" "$2" 0 "${3:-}" ">";  }
+assert_float_lt() { _ptyunit_float_assert lt "$1" "$2" 0 "${3:-}" "<";  }
+assert_float_ge() { _ptyunit_float_assert ge "$1" "$2" 0 "${3:-}" ">="; }
+assert_float_le() { _ptyunit_float_assert le "$1" "$2" 0 "${3:-}" "<="; }
 
 # ── run helper ───────────────────────────────────────────────────────────────
 # Capture a command's stdout+stderr and exit code in one call.

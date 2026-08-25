@@ -459,7 +459,15 @@ assert_ge "$count" 1                    # count >= 1
 assert_le "$count" 99                   # count <= 99
 ```
 
-> **These are integer comparisons** using bash arithmetic. They don't handle floats.
+> **These are integer comparisons** using bash arithmetic. For floats use the `assert_float_*` family:
+
+```bash
+assert_float_eq "$ratio" 0.3            # |ratio - 0.3| <= 1e-9
+assert_float_eq "$ratio" 0.3 0.01       # custom tolerance
+assert_float_gt "$elapsed" 1.5          # also _lt, _ge, _le
+```
+
+> Accepts decimal and scientific notation (`1e-3`, `-2.5`, `.25`). Compared with `awk`, so no `bc` needed. Non-numeric input is reported as a failure — never a silent pass.
 
 ### Mocks
 
