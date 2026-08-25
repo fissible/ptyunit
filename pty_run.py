@@ -18,9 +18,11 @@ Keys:
 Options (set via env vars):
     PTY_COLS=80     terminal width  (default: 80)
     PTY_ROWS=24     terminal height (default: 24)
-    PTY_DELAY=0.15  seconds between keys (default: 0.15)
-    PTY_INIT=0.30   seconds to wait before first key (default: 0.30)
-    PTY_TIMEOUT=10  seconds to wait for process exit (default: 10)
+    PTY_DELAY=0.15  max seconds to wait for output to settle after each key
+    PTY_TIMEOUT=10  seconds to wait for process exit (default: 10); also
+                    bounds the wait for the initial render
+    PTY_INIT        ignored (accepted for compatibility) — the first key is
+                    sent once the initial render has been quiet for 50 ms
     PTY_RAW=0       set to 1 to preserve ANSI escapes in output (default: 0)
                     WARNING: PTY_RAW=1 bypasses all ANSI stripping. Any escape
                     sequences emitted by the child (including OSC title-sets,

@@ -76,7 +76,7 @@ out=$(python3 tests/ptyunit/pty_run.py my_menu.sh DOWN DOWN ENTER)
 assert_contains "$out" "You selected: cherry"
 ```
 
-> **How it works:** `pty_run.py` runs your script inside a real pseudoterminal (PTY), sends keystrokes like `UP`, `DOWN`, `ENTER`, `ESC`, strips all ANSI escape codes, and returns clean text. It supports any program that renders to a terminal — shellframe, dialog, fzf, whiptail, or your own.
+> **How it works:** `pty_run.py` runs your script inside a real pseudoterminal (PTY), sends keystrokes like `UP`, `DOWN`, `ENTER`, `ESC`, strips all ANSI escape codes, and returns clean text. The argument is run as a **bash script** (`bash <script>` — shebangs are not consulted), so anything a bash script can launch is testable: shellframe, dialog, fzf, whiptail, or your own. To drive a non-bash program directly, wrap it: `printf 'exec fzf "$@"\n' > wrap.sh`.
 
 ### Mock external commands
 
@@ -483,9 +483,9 @@ Single characters (`a`, `q`, `1`) and hex escapes (`\x1b`) also work.
 |----------|---------|-----------------|
 | `PTY_COLS` | 80 | Terminal width |
 | `PTY_ROWS` | 24 | Terminal height |
-| `PTY_DELAY` | 0.15 | Seconds between keystrokes |
-| `PTY_INIT` | 0.30 | Seconds before first keystroke (let the UI render) |
+| `PTY_DELAY` | 0.15 | Max seconds to wait for output to settle after each keystroke |
 | `PTY_TIMEOUT` | 10 | Max seconds to wait for the script to exit |
+| `PTY_INIT` | — | **Ignored since v1.5.2** (accepted for compatibility). The first keystroke is sent once the initial render has been quiet for 50 ms, bounded by `PTY_TIMEOUT`. |
 
 > **Exit codes:** The script's own exit code is returned. 124 means timeout (matching GNU `timeout`).
 
@@ -648,7 +648,7 @@ The main differentiator is PTY testing — if your scripts render to `/dev/tty` 
 |---|---|
 | **Bash** | 3.2, 4.x, 5.x |
 | **Python** | 3.6+ (for PTY driver and coverage reports) |
-| **OS** | Linux, macOS |
+| **OS** | Linux, macOS. Windows via WSL only — `pty.fork()` and `/dev/tty` are POSIX; Git Bash, MSYS2, Cygwin and ConPTY are not supported |
 | **Dependencies** | None |
 
 ---
