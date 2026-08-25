@@ -13,9 +13,17 @@
 # test_they). No manual cleanup needed.
 #
 # Auto-detection: if <name> is a currently defined function, creates a
-# function mock (in-process). Otherwise creates a command mock (PATH-based
-# executable script). Command mocks work across subshells and with
-# `command <name>`.
+# function mock. Otherwise creates a command mock (PATH-based executable
+# script). Command mocks work across subshells and with `command <name>`.
+#
+# Where the heredoc BODY runs — this differs by mock type:
+#   function mock  — in the current process (sourced inside a function):
+#                    it can call your other functions, read and set globals,
+#                    use `local`, and must use `return N` (not `exit`) to set
+#                    its status — `exit` would end the test process.
+#   command mock   — in a separate bash process (it is an executable): it sees
+#                    only exported variables, cannot mutate caller state, and
+#                    uses `exit N`.
 #
 # Verification assertions:
 #   assert_called <name>                 — called at least once
@@ -159,6 +167,14 @@ MOCKSCRIPT
 
 # ── Function mock dispatcher (runs in-process) ─────────────────────────────
 
+# Run a heredoc body in the current process with "$@" as its positional
+# parameters. Wrapping the source in a function gives the body a function
+# context, so `local` and `return` work at its top level (#41).
+_ptyunit_mock_run_body() {
+    local _ptyunit_body_file="$1"; shift
+    source "$_ptyunit_body_file" "$@"
+}
+
 _ptyunit_mock_dispatch() {
     local _mock_name="$1"; shift
     local _state="$_PTYUNIT_MOCK_DIR/state/$_mock_name"
@@ -169,7 +185,7 @@ _ptyunit_mock_dispatch() {
     printf '%s\0' "$@" > "$_state.args.$_n"
     export MOCK_CALL_NUM="$_n"
     if [[ -f "$_state.body" ]]; then
-        bash "$_state.body" "$@"
+        _ptyunit_mock_run_body "$_state.body" "$@"
         return $?
     elif [[ -f "$_state.output" ]]; then
         cat "$_state.output"

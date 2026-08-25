@@ -63,4 +63,52 @@ describe "PATH restoration (#42)"
     assert_not_contains "$PATH" "ptyunit-mock"
     PATH="${PATH#/ptyunit-custom-bin:}"
 
+# ═════════════════════════════════════════════════════════════════════════════
+describe "function mock bodies run in-process (#41)"
+
+    ptyunit_hardening_helper() { printf 'helper:%s' "$1"; }
+    ptyunit_hardening_target() { printf 'real'; }
+
+    test_that "body can call a caller-defined, non-exported function"
+    ptyunit_mock ptyunit_hardening_target <<'BODY'
+ptyunit_hardening_helper "$1"
+BODY
+    assert_eq "helper:x" "$(ptyunit_hardening_target x 2>&1)"
+
+    test_that "body can set a caller global"
+    PTYUNIT_HARDENING_SEEN=""
+    ptyunit_mock ptyunit_hardening_target <<'BODY'
+PTYUNIT_HARDENING_SEEN="$1"
+BODY
+    ptyunit_hardening_target hello >/dev/null
+    assert_eq "hello" "$PTYUNIT_HARDENING_SEEN"
+
+    test_that "body's return value is the mock's exit status"
+    ptyunit_mock ptyunit_hardening_target <<'BODY'
+return 7
+BODY
+    ptyunit_hardening_target; rc=$?
+    assert_eq "7" "$rc"
+
+    test_that "local is allowed at body top level"
+    ptyunit_mock ptyunit_hardening_target <<'BODY'
+local x="$1"
+printf '%s' "$x"
+BODY
+    assert_eq "loc" "$(ptyunit_hardening_target loc 2>&1)"
+
+    test_that "MOCK_CALL_NUM and call recording still work for in-process bodies"
+    ptyunit_mock ptyunit_hardening_target <<'BODY'
+printf 'call%s' "$MOCK_CALL_NUM"
+BODY
+    ptyunit_hardening_target a >/dev/null
+    assert_eq "call2" "$(ptyunit_hardening_target b 2>&1)"
+    assert_called_with ptyunit_hardening_target b
+
+    test_that "command mock bodies still run as a separate process"
+    ptyunit_mock ptyunit_hardening_cmd2 <<'BODY'
+printf '%s' "$$"
+BODY
+    assert_not_eq "$$" "$(ptyunit_hardening_cmd2)"
+
 ptyunit_test_summary
