@@ -167,7 +167,7 @@ end_describe() {
 # Run a callback once per line from stdin. Fields are split on |.
 #
 # Usage:
-#   test_each <callback> << 'PARAMS'
+#   test_each [--sep CHAR] <callback> << 'PARAMS'
 #   input1|input2|expected
 #   input3|input4|expected
 #   PARAMS

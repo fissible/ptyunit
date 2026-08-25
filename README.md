@@ -135,6 +135,17 @@ Each row becomes its own test section. Fields are split on `|` and passed as `$1
 
 > **Details:** Lines starting with `#` are skipped (comments). Empty lines are skipped. If any row's callback fails an assertion, it's reported against that specific row.
 
+> **Separator rules:** splitting is on a single character with no escaping, so a value cannot contain the separator. When values need pipes (JSON, `sed` programs, regex alternations), pick another separator with `--sep`:
+>
+> ```bash
+> test_each --sep $'\t' _verify_json << 'PARAMS'
+> {"a":1}	1
+> {"a":[1,2]}	2
+> PARAMS
+> ```
+>
+> A trailing empty field is dropped (`a|b|` yields two params), so put a placeholder in a row whose last value is empty.
+
 ### Group tests with describe blocks
 
 ```bash

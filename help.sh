@@ -164,7 +164,9 @@ _help_params() {
     printf '  PARAMS\n\n'
     printf 'Fields are split on | and passed as $1 $2 $3 ... to the callback.\n'
     printf 'Each row is an independent test section. A failing row does not stop\n'
-    printf 'the others. Lines starting with # are skipped.\n'
+    printf 'the others. Lines starting with # are skipped.\n\n'
+    printf 'Values cannot contain the separator (no escaping). Pick another one\n'
+    printf "with --sep when values need pipes:  test_each --sep \$'\\\\t' _cb << 'P'\n"
 }
 
 _help_describe() {
