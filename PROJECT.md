@@ -37,7 +37,7 @@ independent layers that work together or standalone:
    `--fail-fast`, `--format tap|junit|pretty`, `--jobs N`, `--debug`, `-h`/`--help`.
 
 5. **Code coverage** (`coverage.sh` + `coverage_report.py`) — PS4-based line tracing,
-   text/json/html reports, `--min=N` CI gate. Works on bash 3.2.
+   text/json/html reports, `--min=N` CI gate. Needs bash 4.1+ on PATH (BASH_XTRACEFD); tests themselves still run on 3.2.
 
 6. **Docker cross-version matrix** (`docker/`) — bash 3.2, 4.4, 5.x on Alpine.
 
@@ -49,7 +49,7 @@ independent layers that work together or standalone:
 
 ## Current state
 
-**Self-tests:** 662/662 assertions across 32 files (647 bash + 15 Python). v1.5.1 current.
+**Self-tests:** 724/724 unit + 37/37 integration assertions across 38 files. v1.5.4 current (v1.6.0 pending on `hardening/review-2026-08`).
 
 **Core files:**
 
@@ -125,7 +125,7 @@ blockers.
 |---|---------|--------|--------|
 | 12 | Per-test coverage capture: run each test file individually; emit per-test coverage sets | M | todo |
 | 14 | Redundancy detection: compare per-test coverage sets; report subset tests | L | todo |
-| — | `run` helper: capture stdout+stderr+exit in one call like bats | S | todo |
+| — | `run` helper: capture stdout+stderr+exit in one call like bats | S | done (+ `--separate-stderr`, `assert_success/failure` in #48) |
 | — | `assert_line` negative indices (-1 = last line) | XS | todo |
 | — | `refute_output`, `refute_line` semantic inverses | XS | todo |
 | — | CI workflow (GitHub Actions) for ptyunit itself | S | todo |
