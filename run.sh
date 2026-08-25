@@ -93,13 +93,57 @@ USAGE
     exit 0
 }
 
-# ── Timing helper ─────────────────────────────────────────────────────────────
+# ── Timing helpers ────────────────────────────────────────────────────────────
+# _ptyunit_now prints the current time as "S" (integer seconds) or "S.uuuuuu".
+#   bash >= 5:  EPOCHREALTIME (microseconds).
+#   otherwise:  `date +%s%N` when the platform's date honors %N (GNU coreutils,
+#               macOS). busybox date — the Alpine CI containers — silently drops
+#               %N and yields integer seconds: a coarse clock.
+_PTYUNIT_DATE_NS=""   # lazily detected per process: 1 = date supports %N, 0 = no
+
 _ptyunit_now() {
     if [[ "${BASH_VERSINFO[0]}" -ge 5 ]]; then
         printf '%s' "${EPOCHREALTIME}"
+        return
+    fi
+    if [[ -z "$_PTYUNIT_DATE_NS" ]]; then
+        local _probe
+        _probe=$(date +%s%N 2>/dev/null)
+        if [[ "$_probe" =~ ^[0-9]{16,}$ ]]; then _PTYUNIT_DATE_NS=1; else _PTYUNIT_DATE_NS=0; fi
+    fi
+    if (( _PTYUNIT_DATE_NS )); then
+        local _ns _len
+        _ns=$(date +%s%N)
+        _len=${#_ns}
+        printf '%s.%s' "${_ns:0:_len-9}" "${_ns:_len-9:6}"
     else
         date +%s
     fi
+}
+
+# _ptyunit_elapsed T0 T1 prints the elapsed seconds between two _ptyunit_now
+# stamps as "S.t" (one decimal). Two integer stamps mean a coarse clock, which
+# cannot tell a 10 ms test that straddled a second boundary from a 1.9 s one —
+# so a delta of 1 is reported as fast ("0.0"); a delta of N >= 2 guarantees at
+# least N-1 real seconds and is reported as-is. (Previously a straddle showed
+# "in 1.0 secs" and flaked the "fast tests omit elapsed" self-test on the
+# bash 3.2/4.4 Alpine legs.)
+_ptyunit_elapsed() {
+    local _t0="$1" _t1="$2"
+    if [[ "$_t0" != *.* && "$_t1" != *.* ]]; then
+        local _d=$(( _t1 - _t0 ))
+        if (( _d <= 1 )); then printf '0.0'; else printf '%d.0' "$_d"; fi
+        return
+    fi
+    local _s0="${_t0%.*}" _f0="${_t0#*.}" _s1="${_t1%.*}" _f1="${_t1#*.}"
+    [[ "$_t0" == *.* ]] || _f0=0
+    [[ "$_t1" == *.* ]] || _f1=0
+    # Pad fractional parts to 6 digits
+    _f0="${_f0}000000"; _f0="${_f0:0:6}"
+    _f1="${_f1}000000"; _f1="${_f1:0:6}"
+    local _us=$(( (_s1 * 1000000 + 10#$_f1) - (_s0 * 1000000 + 10#$_f0) ))
+    (( _us < 0 )) && _us=0
+    printf '%d.%d' $(( _us / 1000000 )) $(( (_us / 100000) % 10 ))
 }
 
 # ── XML escaping helper for JUnit output ─────────────────────────────────────
@@ -152,24 +196,7 @@ _run_job() {
     local rc=$?
     _t1=$(_ptyunit_now)
     local _raw_elapsed
-    if [[ "${BASH_VERSINFO[0]}" -ge 5 ]]; then
-        # EPOCHREALTIME gives microsecond precision as a string "SECONDS.MICROSECONDS"
-        # Compute difference using integer arithmetic on the whole and fractional parts
-        local _s0="${_t0%.*}" _f0="${_t0#*.}" _s1="${_t1%.*}" _f1="${_t1#*.}"
-        # Pad fractional parts to 6 digits
-        _f0="${_f0}000000"; _f0="${_f0:0:6}"
-        _f1="${_f1}000000"; _f1="${_f1:0:6}"
-        local _us=$(( (_s1 * 1000000 + 10#$_f1) - (_s0 * 1000000 + 10#$_f0) ))
-        if (( _us < 0 )); then _us=0; fi
-        local _secs=$(( _us / 1000000 ))
-        local _tenths=$(( (_us / 100000) % 10 ))
-        _raw_elapsed="${_secs}.${_tenths}"
-    else
-        # date +%s gives integer seconds
-        _raw_elapsed=$(( _t1 - _t0 ))
-        # Append .0 for consistent format
-        _raw_elapsed="${_raw_elapsed}.0"
-    fi
+    _raw_elapsed=$(_ptyunit_elapsed "$_t0" "$_t1")
     if [[ "$_raw_elapsed" == "0.0" ]]; then
         _elapsed="< 0.1"
     else
@@ -248,19 +275,7 @@ _run_py_job() {
     local rc=$?
     _t1=$(_ptyunit_now)
 
-    if [[ "${BASH_VERSINFO[0]}" -ge 5 ]]; then
-        local _s0="${_t0%.*}" _f0="${_t0#*.}" _s1="${_t1%.*}" _f1="${_t1#*.}"
-        _f0="${_f0}000000"; _f0="${_f0:0:6}"
-        _f1="${_f1}000000"; _f1="${_f1:0:6}"
-        local _us=$(( (_s1 * 1000000 + 10#$_f1) - (_s0 * 1000000 + 10#$_f0) ))
-        if (( _us < 0 )); then _us=0; fi
-        local _secs=$(( _us / 1000000 ))
-        local _tenths=$(( (_us / 100000) % 10 ))
-        _raw_elapsed="${_secs}.${_tenths}"
-    else
-        _raw_elapsed=$(( _t1 - _t0 ))
-        _raw_elapsed="${_raw_elapsed}.0"
-    fi
+    _raw_elapsed=$(_ptyunit_elapsed "$_t0" "$_t1")
     if [[ "$_raw_elapsed" == "0.0" ]]; then
         _elapsed="< 0.1"
     else
