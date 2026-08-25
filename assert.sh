@@ -167,7 +167,7 @@ end_describe() {
 # Run a callback once per line from stdin. Fields are split on |.
 #
 # Usage:
-#   test_each <callback> << 'PARAMS'
+#   test_each [--sep CHAR] <callback> << 'PARAMS'
 #   input1|input2|expected
 #   input3|input4|expected
 #   PARAMS
@@ -176,14 +176,29 @@ end_describe() {
 # A test_that section is created for each row, named after the callback
 # and the raw parameter line.
 # Lines starting with # are skipped.
+#
+# Fields are split on a single character (default `|`) with no escaping —
+# a value cannot contain the separator. For values with pipes (JSON, sed
+# programs, regexes) pick another separator: `--sep $'\t'` or `--sep ,`.
+# A trailing empty field is dropped (`a|b|` → 2 params), so a row whose
+# last value is empty needs a placeholder.
 
 test_each() {
+    local _ptyunit_sep='|'
+    if [[ "${1:-}" == "--sep" ]]; then
+        _ptyunit_sep="${2:-}"
+        if (( ${#_ptyunit_sep} != 1 )); then
+            printf 'test_each: --sep must be a single character, got %q\n' "$_ptyunit_sep" >&2
+            return 2
+        fi
+        shift 2
+    fi
     local callback="$1"
     local _ptyunit_pline
     while IFS= read -r _ptyunit_pline || [[ -n "$_ptyunit_pline" ]]; do
         [[ -z "$_ptyunit_pline" || "$_ptyunit_pline" == \#* ]] && continue
         local _ptyunit_params=()
-        IFS='|' read -ra _ptyunit_params <<< "$_ptyunit_pline"
+        IFS="$_ptyunit_sep" read -ra _ptyunit_params <<< "$_ptyunit_pline"
         ptyunit_test_begin "$callback (${_ptyunit_pline})"
         "$callback" "${_ptyunit_params[@]}"
     done
@@ -463,25 +478,137 @@ assert_le() {
     fi
 }
 
+# ── Float comparisons ────────────────────────────────────────────────────────
+# Decimal or scientific notation (1.5, -2, .25, 1e-3). Compared with awk
+# (POSIX — no bc needed). Non-numeric input is a FAIL, never a silent pass.
+#
+# Usage:
+#   assert_float_eq actual expected [tolerance=1e-9] [msg]
+#   assert_float_gt actual threshold [msg]     (also _lt, _ge, _le)
+
+_ptyunit_is_number() {
+    [[ "$1" =~ ^[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$ ]]
+}
+
+# Shared driver: _ptyunit_float_assert <op> <a> <b> <tol> <msg> <symbol>
+_ptyunit_float_assert() {
+    (( _PTYUNIT_SKIP_CURRENT )) && return
+    local op="$1" a="$2" b="$3" tol="$4" msg="$5" sym="$6"
+    local _x
+    for _x in "$a" "$b" "$tol"; do
+        if ! _ptyunit_is_number "$_x"; then
+            # @pty_skip
+            _ptyunit_report_fail "$msg" "$(printf '  not a number: %q' "$_x")"
+            return
+        fi
+    done
+    if awk -v a="$a" -v b="$b" -v t="$tol" -v op="$op" 'BEGIN {
+            a += 0; b += 0; t += 0
+            if      (op == "eq") ok = (a - b <= t && b - a <= t)
+            else if (op == "gt") ok = (a > b)
+            else if (op == "lt") ok = (a < b)
+            else if (op == "ge") ok = (a >= b)
+            else                 ok = (a <= b)
+            exit !ok }'; then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        # @pty_skip
+        _ptyunit_report_fail "$msg" "$(printf '  expected: %s %s %s' "$a" "$sym" "$b")"
+    fi
+}
+
+assert_float_eq() {
+    local tol="${3:-1e-9}"
+    _ptyunit_float_assert eq "$1" "$2" "$tol" "${4:-}" "≈ (±$tol)"
+}
+assert_float_gt() { _ptyunit_float_assert gt "$1" "$2" 0 "${3:-}" ">";  }
+assert_float_lt() { _ptyunit_float_assert lt "$1" "$2" 0 "${3:-}" "<";  }
+assert_float_ge() { _ptyunit_float_assert ge "$1" "$2" 0 "${3:-}" ">="; }
+assert_float_le() { _ptyunit_float_assert le "$1" "$2" 0 "${3:-}" "<="; }
+
 # ── run helper ───────────────────────────────────────────────────────────────
-# Capture a command's stdout+stderr and exit code in one call.
-# Sets: $output (string), $status (integer), $lines (array).
+# Capture a command's output and exit code in one call.
+# Sets: $output (string), $status (integer), $lines (array), $stderr (string).
 #
 # Usage:
 #   run my_command arg1 arg2
-#   assert_eq "0" "$status"
+#   assert_success                        # or: assert_eq "0" "$status"
 #   assert_contains "$output" "success"
 #   assert_eq "first line" "${lines[0]}"
+#
+#   run --separate-stderr my_command      # $output = stdout only
+#   assert_eq "" "$stderr"                # $stderr = stderr only
+#
+# Without --separate-stderr, $output holds both streams interleaved (as a
+# terminal would show them) and $stderr is "". Splitting one run into two
+# variables would lose that interleaving, so it is opt-in (#48).
 
 run() {
-    local _rc=0
-    output=$("$@" 2>&1) || _rc=$?
+    local _rc=0 _ptyunit_separate=0
+    if [[ "${1:-}" == "--separate-stderr" ]]; then
+        _ptyunit_separate=1
+        shift
+    fi
+    stderr=""
+    if (( _ptyunit_separate )); then
+        local _ptyunit_errf
+        _ptyunit_errf=$(mktemp "${TMPDIR:-/tmp}/ptyunit-run.XXXXXX") || {
+            # @pty_skip — mktemp failure; infrastructure error path
+            printf 'ptyunit: run: mktemp failed\n' >&2
+            return 1
+        }
+        output=$("$@" 2>"$_ptyunit_errf") || _rc=$?
+        stderr=$(<"$_ptyunit_errf")
+        rm -f "$_ptyunit_errf"
+    else
+        output=$("$@" 2>&1) || _rc=$?
+    fi
     status=$_rc
     lines=()
     if [[ -n "$output" ]]; then
         while IFS= read -r _ptyunit_run_line; do
             lines+=("$_ptyunit_run_line")
         done <<< "$output"
+    fi
+}
+
+# ── Exit-status assertions (use after `run`) ─────────────────────────────────
+# assert_success [msg]              — $status is 0
+# assert_failure [expected] [msg]   — $status is non-zero, or equals expected
+
+assert_success() {
+    (( _PTYUNIT_SKIP_CURRENT )) && return
+    local msg="${1:-}"
+    if [[ "${status:-}" == "0" ]]; then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        # @pty_skip
+        _ptyunit_report_fail "$msg" "$(printf '  expected status 0, got status %s\n  output: %s' \
+            "${status:-unset}" "${output:-}")"
+    fi
+}
+
+assert_failure() {
+    (( _PTYUNIT_SKIP_CURRENT )) && return
+    local expected="" msg=""
+    if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+        expected="$1"; msg="${2:-}"
+    else
+        msg="${1:-}"
+    fi
+    if [[ -z "$expected" ]]; then
+        if [[ "${status:-0}" != "0" ]]; then
+            (( _PTYUNIT_TEST_PASS++ )) || true
+        else
+            # @pty_skip
+            _ptyunit_report_fail "$msg" "$(printf '  expected non-zero status, got status 0\n  output: %s' "${output:-}")"
+        fi
+    elif [[ "${status:-}" == "$expected" ]]; then
+        (( _PTYUNIT_TEST_PASS++ )) || true
+    else
+        # @pty_skip
+        _ptyunit_report_fail "$msg" "$(printf '  expected status %s, got status %s\n  output: %s' \
+            "$expected" "${status:-unset}" "${output:-}")"
     fi
 }
 

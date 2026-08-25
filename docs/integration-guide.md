@@ -101,9 +101,12 @@ Literal characters (`y`, `q`, `1`) and hex escapes (`\x1b`) are also accepted.
 
 | Variable | Default | When to change |
 |----------|---------|----------------|
-| `PTY_INIT` | `0.30` | Slow-starting scripts need more init time |
-| `PTY_DELAY` | `0.15` | Slow keystroke processing needs larger delay |
-| `PTY_TIMEOUT` | `10` | Long-running scripts need more timeout |
+| `PTY_DELAY` | `0.15` | Slow keystroke processing needs a larger settle window |
+| `PTY_TIMEOUT` | `10` | Long-running or slow-starting scripts need more timeout (also bounds the wait for the initial render) |
+
+`PTY_INIT` is accepted but ignored: the first key is sent when the initial render has been quiet for 50 ms, so slow-starting scripts no longer need tuning.
+
+To assert on the *rendered screen* between keystrokes (which row is highlighted, what a cell contains) rather than on the final text, use `PTYSession` from `pty_session.py` — see "Assert on the rendered screen between keystrokes" in the README.
 
 ---
 

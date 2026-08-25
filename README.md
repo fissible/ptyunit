@@ -76,7 +76,7 @@ out=$(python3 tests/ptyunit/pty_run.py my_menu.sh DOWN DOWN ENTER)
 assert_contains "$out" "You selected: cherry"
 ```
 
-> **How it works:** `pty_run.py` runs your script inside a real pseudoterminal (PTY), sends keystrokes like `UP`, `DOWN`, `ENTER`, `ESC`, strips all ANSI escape codes, and returns clean text. It supports any program that renders to a terminal — shellframe, dialog, fzf, whiptail, or your own.
+> **How it works:** `pty_run.py` runs your script inside a real pseudoterminal (PTY), sends keystrokes like `UP`, `DOWN`, `ENTER`, `ESC`, strips all ANSI escape codes, and returns clean text. The argument is run as a **bash script** (`bash <script>` — shebangs are not consulted), so anything a bash script can launch is testable: shellframe, dialog, fzf, whiptail, or your own. To drive a non-bash program directly, wrap it: `printf 'exec fzf "$@"\n' > wrap.sh`.
 
 ### Mock external commands
 
@@ -134,6 +134,17 @@ PARAMS
 Each row becomes its own test section. Fields are split on `|` and passed as `$1`, `$2`, `$3`, etc. to your callback.
 
 > **Details:** Lines starting with `#` are skipped (comments). Empty lines are skipped. If any row's callback fails an assertion, it's reported against that specific row.
+
+> **Separator rules:** splitting is on a single character with no escaping, so a value cannot contain the separator. When values need pipes (JSON, `sed` programs, regex alternations), pick another separator with `--sep`:
+>
+> ```bash
+> test_each --sep $'\t' _verify_json << 'PARAMS'
+> {"a":1}	1
+> {"a":[1,2]}	2
+> PARAMS
+> ```
+>
+> A trailing empty field is dropped (`a|b|` yields two params), so put a placeholder in a row whose last value is empty.
 
 ### Group tests with describe blocks
 
@@ -231,12 +242,20 @@ deploy_to_staging() { echo "deployed to staging"; }
 
 test_that "deploy succeeds"
 run deploy_to_staging
-assert_eq "0" "$status"
+assert_success
 assert_contains "$output" "deployed"
 assert_eq "deployed to staging" "${lines[0]}"
+
+test_that "deploy reports a bad token"
+run --separate-stderr deploy_to_staging --token bad
+assert_failure 2                 # or plain assert_failure for "any non-zero"
+assert_eq "" "$output"           # nothing on stdout…
+assert_contains "$stderr" "401"  # …the error went to stderr
 ```
 
-`run` captures everything at once: `$output` (stdout+stderr), `$status` (exit code), and `$lines` (array, one element per line).
+`run` captures everything at once: `$output` (stdout+stderr), `$status` (exit code), and `$lines` (array, one element per line). `assert_success` / `assert_failure [code]` check `$status` and print the captured output on failure.
+
+With `--separate-stderr`, `$output` holds only stdout and `$stderr` holds stderr. Without it, `$output` keeps both streams interleaved in the order they appeared and `$stderr` is empty — splitting can't preserve interleaving, so it's opt-in.
 
 > **Why this helps:** Without `run`, you'd write `out=$(cmd 2>&1); rc=$?` and manually split lines. With `run`, it's one call. The `$lines` array lets you check specific lines by index: `${lines[0]}` is the first line, `${lines[1]}` the second, etc.
 
@@ -448,7 +467,15 @@ assert_ge "$count" 1                    # count >= 1
 assert_le "$count" 99                   # count <= 99
 ```
 
-> **These are integer comparisons** using bash arithmetic. They don't handle floats.
+> **These are integer comparisons** using bash arithmetic. For floats use the `assert_float_*` family:
+
+```bash
+assert_float_eq "$ratio" 0.3            # |ratio - 0.3| <= 1e-9
+assert_float_eq "$ratio" 0.3 0.01       # custom tolerance
+assert_float_gt "$elapsed" 1.5          # also _lt, _ge, _le
+```
+
+> Accepts decimal and scientific notation (`1e-3`, `-2.5`, `.25`). Compared with `awk`, so no `bc` needed. Non-numeric input is reported as a failure — never a silent pass.
 
 ### Mocks
 
@@ -477,15 +504,24 @@ Runs `bash <script>` inside a real pseudoterminal, sends each KEY as a keystroke
 
 Single characters (`a`, `q`, `1`) and hex escapes (`\x1b`) also work.
 
+**Checkpoints mid-sequence:** `--expect TEXT` between keys asserts that `TEXT` appears in the output so far *before* the next key is sent. On a miss the remaining keys are skipped, the script is terminated, the exit code is 65 and stderr names the failing checkpoint:
+
+```bash
+out=$(python3 tests/ptyunit/pty_run.py my_menu.sh DOWN --expect "> banana" ENTER)
+assert_eq "0" "$?"
+```
+
+This is the bash-only middle ground between fire-and-forget keys and `PTYSession` (below); it checks the text stream, not screen coordinates.
+
 ### Tuning
 
 | Variable | Default | What it controls |
 |----------|---------|-----------------|
 | `PTY_COLS` | 80 | Terminal width |
 | `PTY_ROWS` | 24 | Terminal height |
-| `PTY_DELAY` | 0.15 | Seconds between keystrokes |
-| `PTY_INIT` | 0.30 | Seconds before first keystroke (let the UI render) |
+| `PTY_DELAY` | 0.15 | Max seconds to wait for output to settle after each keystroke |
 | `PTY_TIMEOUT` | 10 | Max seconds to wait for the script to exit |
+| `PTY_INIT` | — | **Ignored since v1.5.2** (accepted for compatibility). The first keystroke is sent once the initial render has been quiet for 50 ms, bounded by `PTY_TIMEOUT`. |
 
 > **Exit codes:** The script's own exit code is returned. 124 means timeout (matching GNU `timeout`).
 
@@ -495,6 +531,73 @@ Single characters (`a`, `q`, `1`) and hex escapes (`\x1b`) also work.
 from pty_run import run
 output, exit_code = run("my_menu.sh", ["DOWN", "ENTER"], key_delay=0.1)
 ```
+
+### Assert on the rendered screen between keystrokes (`PTYSession`)
+
+`pty_run.py` is fire-and-forget: send keys, check the final text. When the assertion is about what's *rendered* after each key — which row is highlighted, what a cell contains — use `PTYSession`. It runs the script under a [pyte](https://github.com/selectel/pyte) terminal emulator and gives you the screen as a grid.
+
+```bash
+pip install -r tests/ptyunit/requirements-screen.txt   # pyte
+```
+
+```python
+# tests/integration/test_menu.py
+from pty_session import PTYSession
+
+def test_down_moves_highlight():
+    with PTYSession("my_menu.sh", cols=80, rows=24) as s:
+        assert s.screen.find_row("> apple") == 2
+        s.send("DOWN")
+        assert s.screen.find_row("> banana") == 3
+        s.send("ENTER")
+        assert s.exit_code == 0
+        assert "You selected: banana" in s.stdout
+```
+
+`send()` writes the key, waits until the screen has been quiet for `stable_window` seconds (default 0.05, bounded by `timeout`), and records the exit code if the script ended on that key.
+
+| | |
+|---|---|
+| `PTYSession(script, *, cols=80, rows=24, timeout=10.0, stable_window=0.05, env=None)` | Context manager. `env` is merged over the inherited environment. |
+| `session.send(key)` | Send one key (same names as `pty_run.py`), then wait for stability |
+| `session.wait_for_stable(window=None)` | Wait without sending — e.g. after a timer-driven redraw |
+| `session.screen` | The current `Screen` |
+| `session.exit_code` | Exit code, or `None` while the script is still running |
+| `session.stdout` | ANSI-stripped output so far |
+| `Screen.row(n)` | Text of row `n` (0-indexed), trailing spaces stripped |
+| `Screen.find_row(text)` | Index of the first row containing `text`, or `None` |
+| `Screen.cell(row, col)` / `Screen.cell_bold(row, col)` | One character / its bold flag at grid coordinates |
+
+Put `test_*.py` files in `tests/unit/` or `tests/integration/` — `run.sh` discovers them and runs each with `pytest`, counting results alongside the bash files. Add a `tests/conftest.py` so the import resolves from your repo:
+
+```python
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "ptyunit"))
+```
+
+> **Which one?** `pty_run.py` when "send keys, check the final text" is enough and you want to stay in bash. `PTYSession` when the assertion is about the rendered screen mid-sequence. Both use the same output-stable waiting, so neither needs sleeps.
+
+### Snapshot the whole screen
+
+For visual regression, compare the rendered screen against a stored fixture instead of asserting row by row:
+
+```python
+def test_main_menu_layout():
+    with PTYSession("my_menu.sh") as s:
+        s.send("DOWN")
+        s.assert_snapshot("main-menu-second-item")
+```
+
+From bash, the same thing without writing Python:
+
+```bash
+test_that "main menu renders"
+assert_true python3 tests/ptyunit/pty_snapshot.py my_menu.sh main-menu DOWN
+```
+
+- The fixture is `__snapshots__/<name>.txt` — beside the calling test file in Python, or `./__snapshots__/` (override with `PTYUNIT_SNAPSHOT_DIR`) from bash. It holds `Screen.text()`: rows right-stripped, trailing blank rows dropped. Commit these files.
+- **First run** writes the fixture and passes (a notice goes to stderr). **Mismatch** fails with a unified diff — fixture on `-`, live screen on `+`.
+- **Accepting a change:** `PTYUNIT_UPDATE_SNAPSHOTS=1 bash tests/ptyunit/run.sh`, or `pty_snapshot.py --update …` / `assert_snapshot(name, update=True)` for one fixture. Review the diff in `git` before committing.
 
 ---
 
@@ -556,7 +659,7 @@ if (( count == 0 )); then
 fi
 ```
 
-> **How it works:** Each test file runs with `set -x` and a custom `PS4` that logs `file:line` to a trace file. A Python script then cross-references the trace against your source files. Works on bash 3.2 — no special tools needed.
+> **How it works:** Each test file runs with `set -x` and a custom `PS4` that logs `file:line` to a trace file via `BASH_XTRACEFD`. A Python script then cross-references the trace against your source files. No special tools needed — but **coverage requires bash 4.1+ on `PATH`** (`BASH_XTRACEFD` doesn't exist on macOS's stock 3.2; `brew install bash`). `coverage.sh` exits 2 with a message on older bash rather than reporting 0%. Your tests still run on 3.2 via `run.sh` — only measurement needs 4.1.
 
 ---
 
@@ -648,7 +751,7 @@ The main differentiator is PTY testing — if your scripts render to `/dev/tty` 
 |---|---|
 | **Bash** | 3.2, 4.x, 5.x |
 | **Python** | 3.6+ (for PTY driver and coverage reports) |
-| **OS** | Linux, macOS |
+| **OS** | Linux, macOS. Windows via WSL only — `pty.fork()` and `/dev/tty` are POSIX; Git Bash, MSYS2, Cygwin and ConPTY are not supported |
 | **Dependencies** | None |
 
 ---

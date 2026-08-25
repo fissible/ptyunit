@@ -13,9 +13,17 @@
 # test_they). No manual cleanup needed.
 #
 # Auto-detection: if <name> is a currently defined function, creates a
-# function mock (in-process). Otherwise creates a command mock (PATH-based
-# executable script). Command mocks work across subshells and with
-# `command <name>`.
+# function mock. Otherwise creates a command mock (PATH-based executable
+# script). Command mocks work across subshells and with `command <name>`.
+#
+# Where the heredoc BODY runs — this differs by mock type:
+#   function mock  — in the current process (sourced inside a function):
+#                    it can call your other functions, read and set globals,
+#                    use `local`, and must use `return N` (not `exit`) to set
+#                    its status — `exit` would end the test process.
+#   command mock   — in a separate bash process (it is an executable): it sees
+#                    only exported variables, cannot mutate caller state, and
+#                    uses `exit N`.
 #
 # Verification assertions:
 #   assert_called <name>                 — called at least once
@@ -49,7 +57,6 @@ _ptyunit_mock_init() {
             _PTYUNIT_MOCK_DIR=""
             return 1
         }
-        printf '%s' "$PATH" > "$_PTYUNIT_MOCK_DIR/original_path"
         PATH="$_PTYUNIT_MOCK_DIR/bin:$PATH"
         export PATH
     fi
@@ -60,6 +67,14 @@ _ptyunit_mock_init() {
 ptyunit_mock() {
     local name="$1"; shift
     local mock_output="" mock_exit="0"
+
+    # Validate the name before it reaches any file path or eval (#40).
+    # Allows identifiers plus '.' and '-' so command names like
+    # docker-compose or foo.sh work; rejects '/', whitespace, metacharacters.
+    if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ ]]; then
+        printf 'ptyunit_mock: invalid mock name %q\n' "$name" >&2
+        return 2
+    fi
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -94,8 +109,10 @@ ptyunit_mock() {
     fi
     printf '%s' "$mock_type" > "$state_dir/$name.type"
 
-    # Register the mock
-    printf '%s\n' "$name" >> "$_PTYUNIT_MOCK_DIR/registry"
+    # Register the mock (once — re-mocking must not add a duplicate entry, #39)
+    if ! grep -qx -- "$name" "$_PTYUNIT_MOCK_DIR/registry" 2>/dev/null; then
+        printf '%s\n' "$name" >> "$_PTYUNIT_MOCK_DIR/registry"
+    fi
 
     if [[ "$mock_type" == "function" ]]; then
         _ptyunit_mock_create_function "$name" "$state_dir"
@@ -109,8 +126,12 @@ ptyunit_mock() {
 _ptyunit_mock_create_function() {
     local name="$1" state_dir="$2"
 
-    # Save original function definition
-    declare -f "$name" > "$_PTYUNIT_MOCK_DIR/_origfunc_$name" 2>/dev/null || true
+    # Save original function definition — only on the first mock of this name.
+    # Re-mocking within a section would otherwise capture mock #1's dispatcher
+    # as the "original" and leak it into every later section (#39).
+    if [[ ! -f "$_PTYUNIT_MOCK_DIR/_origfunc_$name" ]]; then
+        declare -f "$name" > "$_PTYUNIT_MOCK_DIR/_origfunc_$name" 2>/dev/null || true
+    fi
 
     # Create mock function that dispatches to _ptyunit_mock_dispatch
     eval "${name}() { _ptyunit_mock_dispatch '${name}' \"\$@\"; }"
@@ -146,6 +167,14 @@ MOCKSCRIPT
 
 # ── Function mock dispatcher (runs in-process) ─────────────────────────────
 
+# Run a heredoc body in the current process with "$@" as its positional
+# parameters. Wrapping the source in a function gives the body a function
+# context, so `local` and `return` work at its top level (#41).
+_ptyunit_mock_run_body() {
+    local _ptyunit_body_file="$1"; shift
+    source "$_ptyunit_body_file" "$@"
+}
+
 _ptyunit_mock_dispatch() {
     local _mock_name="$1"; shift
     local _state="$_PTYUNIT_MOCK_DIR/state/$_mock_name"
@@ -156,7 +185,7 @@ _ptyunit_mock_dispatch() {
     printf '%s\0' "$@" > "$_state.args.$_n"
     export MOCK_CALL_NUM="$_n"
     if [[ -f "$_state.body" ]]; then
-        bash "$_state.body" "$@"
+        _ptyunit_mock_run_body "$_state.body" "$@"
         return $?
     elif [[ -f "$_state.output" ]]; then
         cat "$_state.output"
@@ -177,9 +206,11 @@ ptyunit_unmock() {
 
     if [[ "$mock_type" == "function" ]]; then
         unset -f "$name" 2>/dev/null
-        # Restore original function if it was saved
+        # Restore original function if it was saved, then forget it so a
+        # later mock of the same name captures a fresh original.
         if [[ -f "$_PTYUNIT_MOCK_DIR/_origfunc_$name" ]]; then
             source "$_PTYUNIT_MOCK_DIR/_origfunc_$name"
+            rm -f "$_PTYUNIT_MOCK_DIR/_origfunc_$name"
         fi
     else
         rm -f "$_PTYUNIT_MOCK_DIR/bin/$name"
@@ -201,15 +232,14 @@ _ptyunit_mock_cleanup_all() {
         done < "$_PTYUNIT_MOCK_DIR/registry"  # @pty_skip
     fi
 
-    # Restore original PATH
-    if [[ -f "$_PTYUNIT_MOCK_DIR/original_path" ]]; then
-        local _saved_path
-        _saved_path=$(<"$_PTYUNIT_MOCK_DIR/original_path")
-        if [[ -n "$_saved_path" ]]; then
-            PATH="$_saved_path"
-            export PATH
-        fi
-    fi
+    # Remove only the mock bin dir from PATH. Restoring a snapshot would
+    # clobber PATH changes the test itself made after mocking (#42).
+    local _mock_bin="$_PTYUNIT_MOCK_DIR/bin"
+    PATH=":$PATH:"
+    PATH="${PATH//":$_mock_bin:"/:}"
+    PATH="${PATH#:}"
+    PATH="${PATH%:}"
+    export PATH
 
     [[ -n "$_PTYUNIT_MOCK_DIR" ]] && rm -rf "$_PTYUNIT_MOCK_DIR"
     _PTYUNIT_MOCK_DIR=""

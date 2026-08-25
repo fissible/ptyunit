@@ -15,19 +15,22 @@ Usage:
         assert session.screen.find_row("[ No ]") is not None
 """
 
+import difflib
 import fcntl
+import inspect
 import os
 import pty
 import select
 import signal
 import struct
+import sys
 import tempfile
 import termios
 import time
 
 import pyte
 
-from pty_run import ANSI_RE, NAMED_KEYS, parse_key  # noqa: F401 (re-exported)
+from pty_run import ANSI_RE, NAMED_KEYS, parse_key, coverage_bash_env_script  # noqa: F401 (re-exported)
 
 
 class Screen:
@@ -62,6 +65,18 @@ class Screen:
             if text in line:
                 return i
         return None
+
+    def text(self) -> str:
+        """The whole screen as one normalized string (#50).
+
+        Rows are right-stripped and joined with newlines; trailing blank rows
+        are dropped so a 24-row terminal showing 3 lines yields 3 lines. This
+        is the form stored by assert_snapshot().
+        """
+        rows = [line.rstrip() for line in self._screen.display]
+        while rows and not rows[-1]:
+            rows.pop()
+        return "\n".join(rows)
 
 
 class PTYSession:
@@ -118,22 +133,14 @@ class PTYSession:
         # Coverage injection: if PTYUNIT_COVERAGE_FILE is set, write a BASH_ENV
         # startup script that enables PS4 xtrace into the trace file.
         # Must happen before fork so the child inherits the updated BASH_ENV.
-        # BASH_XTRACEFD requires bash 4.1+; the guard prevents set -x from
-        # redirecting to stderr (fd 2) on bash 3.2, which would corrupt PTY output.
+        # The script text (with its bash-4.1 BASH_XTRACEFD guard) is shared
+        # with pty_run.run() — see coverage_bash_env_script() there (#44).
         coverage_file = os.environ.get("PTYUNIT_COVERAGE_FILE")
         if coverage_file:
             self._prev_bash_env = os.environ.get("BASH_ENV")
             fd, self._bash_env_tmpfile = tempfile.mkstemp(suffix=".sh")
             with os.fdopen(fd, "w") as f:
-                f.write(
-                    f'exec 9>>"{coverage_file}"\n'
-                    "if [[ ${BASH_VERSINFO[0]} -ge 4 && ${BASH_VERSINFO[1]} -ge 1 ]]; then\n"
-                    "    export BASH_XTRACEFD=9\n"
-                    "    PS4='+${BASH_SOURCE:-?}:${LINENO} '\n"
-                    "    export PS4\n"
-                    "    set -x\n"
-                    "fi\n"
-                )
+                f.write(coverage_bash_env_script(coverage_file))
             os.environ["BASH_ENV"] = self._bash_env_tmpfile
 
         self._pid, self._master_fd = pty.fork()
@@ -149,6 +156,14 @@ class PTYSession:
                 merged = {**os.environ, **self._env}
                 os.execvpe("bash", ["bash", self._script], merged)
             else:
+                # Restore default signal dispositions before exec (see
+                # pty_run.run): inherited SIG_IGN from async bash contexts
+                # would otherwise make the guest TUI unable to trap Ctrl-C.
+                for _sig in (signal.SIGINT, signal.SIGQUIT):
+                    try:
+                        signal.signal(_sig, signal.SIG_DFL)
+                    except (ValueError, OSError, RuntimeError):
+                        pass
                 os.execvp("bash", ["bash", self._script])
             os._exit(1)  # unreachable — execvp replaces the process
 
@@ -306,3 +321,49 @@ class PTYSession:
     def stdout(self) -> str:
         """ANSI-stripped accumulated output. Valid at any point (partial mid-session)."""
         return ANSI_RE.sub(b"", self._raw_output).decode("utf-8", errors="replace")
+
+    def assert_snapshot(self, name: str, *, snapshot_dir: str = None,
+                        update: bool = False) -> None:
+        """Compare the current screen against a stored fixture (#50).
+
+        The fixture is ``<snapshot_dir>/<name>.txt`` holding Screen.text()
+        plus a trailing newline. *snapshot_dir* defaults to
+        ``$PTYUNIT_SNAPSHOT_DIR``, else ``__snapshots__/`` beside the calling
+        test file.
+
+        - No fixture yet: it is written, a notice goes to stderr, and the
+          assertion passes (Jest/insta convention).
+        - ``update=True`` or ``PTYUNIT_UPDATE_SNAPSHOTS=1``: the fixture is
+          rewritten unconditionally.
+        - Mismatch: AssertionError whose message is a unified diff
+          (fixture on the ``-`` side, live screen on the ``+`` side).
+        """
+        if snapshot_dir is None:
+            snapshot_dir = os.environ.get("PTYUNIT_SNAPSHOT_DIR")
+        if snapshot_dir is None:
+            caller = inspect.stack()[1].filename
+            snapshot_dir = os.path.join(os.path.dirname(os.path.abspath(caller)), "__snapshots__")
+        update = update or os.environ.get("PTYUNIT_UPDATE_SNAPSHOTS") == "1"
+
+        path = os.path.join(snapshot_dir, f"{name}.txt")
+        actual = self.screen.text() + "\n"
+
+        if update or not os.path.exists(path):
+            verb = "updated" if os.path.exists(path) else "wrote new"
+            os.makedirs(snapshot_dir, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(actual)
+            sys.stderr.write(f"ptyunit: {verb} snapshot {path}\n")
+            return
+
+        with open(path, encoding="utf-8") as f:
+            expected = f.read()
+        if expected != actual:
+            diff = "".join(difflib.unified_diff(
+                expected.splitlines(True), actual.splitlines(True),
+                fromfile=path, tofile="<live screen>",
+            ))
+            raise AssertionError(
+                f"screen snapshot mismatch: {path}\n"
+                f"(rerun with PTYUNIT_UPDATE_SNAPSHOTS=1 to accept the new screen)\n{diff}"
+            )

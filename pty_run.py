@@ -14,13 +14,22 @@ Keys:
     PAGE_UP PAGE_DOWN                     paging keys
     q, a, v, ...                          literal single characters
     \\x1b, \\r, \\n, ...                  hex escape sequences
+    --expect TEXT                         checkpoint: after the preceding key
+                                          settles, the stripped output so far
+                                          must contain TEXT; otherwise no more
+                                          keys are sent, the child is killed,
+                                          exit code is 65 and a diagnostic goes
+                                          to stderr. Before any key it checks
+                                          the initial render.
 
 Options (set via env vars):
     PTY_COLS=80     terminal width  (default: 80)
     PTY_ROWS=24     terminal height (default: 24)
-    PTY_DELAY=0.15  seconds between keys (default: 0.15)
-    PTY_INIT=0.30   seconds to wait before first key (default: 0.30)
-    PTY_TIMEOUT=10  seconds to wait for process exit (default: 10)
+    PTY_DELAY=0.15  max seconds to wait for output to settle after each key
+    PTY_TIMEOUT=10  seconds to wait for process exit (default: 10); also
+                    bounds the wait for the initial render
+    PTY_INIT        ignored (accepted for compatibility) — the first key is
+                    sent once the initial render has been quiet for 50 ms
     PTY_RAW=0       set to 1 to preserve ANSI escapes in output (default: 0)
                     WARNING: PTY_RAW=1 bypasses all ANSI stripping. Any escape
                     sequences emitted by the child (including OSC title-sets,
@@ -53,6 +62,7 @@ import tempfile
 import termios
 import time
 
+
 NAMED_KEYS = {
     "UP":        b"\x1b[A",
     "DOWN":      b"\x1b[B",
@@ -82,6 +92,48 @@ ANSI_RE = re.compile(
     rb"|\[[0-?]*[ -/]*[@-~]"             # CSI sequences (ESC [ ... final)
     rb")"
 )
+
+
+# A child killed mid-sequence (timeout) can leave a truncated escape at the
+# very end of the buffer. ANSI_RE needs a final byte and cannot match it, so
+# the raw ESC would leak into "stripped" output (#45). This matches one
+# incomplete CSI / OSC / DCS-family / nF prefix — or a bare ESC — at end of data.
+_TRAILING_PARTIAL_RE = re.compile(
+    rb"\x1b(?:\[[0-?]*[ -/]*|\][^\x07\x1b]*|[PX^_][^\x1b]*|[ -/]*)?$"
+)
+
+
+def strip_ansi(data: bytes) -> bytes:
+    """Remove ANSI escape sequences and normalize line endings to \\n.
+
+    The trailing incomplete sequence must be dropped *before* ANSI_RE runs:
+    for a truncated OSC/DCS (no terminator) the ST-terminated arms fail and
+    the Fe catch-all would strip just `ESC ]` / `ESC P`, leaking the payload.
+    """
+    out = _TRAILING_PARTIAL_RE.sub(b"", data)
+    out = ANSI_RE.sub(b"", out)
+    return out.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+def coverage_bash_env_script(coverage_file: str) -> str:
+    """Return the BASH_ENV startup script that enables PS4 xtrace into
+    *coverage_file* on fd 9.
+
+    Shared by pty_run.run() and pty_session.PTYSession so the two drivers
+    cannot drift (#44). The version guard matters: BASH_XTRACEFD arrived in
+    bash 4.1; on older bash `set -x` writes to stderr — which is the PTY —
+    and trace lines would pollute the captured output. The comparison is
+    (major > 4) or (major == 4 and minor >= 1), so bash 5.0 is included.
+    """
+    return (
+        f'exec 9>>"{coverage_file}"\n'
+        "if (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 1) )); then\n"
+        "    export BASH_XTRACEFD=9\n"
+        "    PS4='+${BASH_SOURCE:-?}:${LINENO} '\n"
+        "    export PS4\n"
+        "    set -x\n"
+        "fi\n"
+    )
 
 
 def parse_key(token: str) -> bytes:
@@ -156,6 +208,26 @@ def _drain_until_stable(fd: int, window: float = 0.05, timeout: float = 10.0) ->
     return buf
 
 
+def _reap(pid: int, blocking: bool = False, max_wait: float = 5.0):
+    """Reap *pid*, returning its exit code, or None if it has not exited.
+
+    Never raises or blocks indefinitely: ECHILD/ESRCH return None, and
+    blocking=True polls with WNOHANG for at most *max_wait* seconds before
+    giving up, so a wedged child can never hang the runner.
+    """
+    deadline = time.monotonic() + max_wait
+    while True:
+        try:
+            waited, status = os.waitpid(pid, os.WNOHANG)
+        except (ChildProcessError, OSError):
+            return None
+        if waited != 0:
+            return os.waitstatus_to_exitcode(status)
+        if not blocking or time.monotonic() >= deadline:
+            return None
+        time.sleep(0.01)
+
+
 def run(
     script: str,
     keys: list,
@@ -170,8 +242,29 @@ def run(
 ) -> tuple:
     """Run *script* in a PTY with proper controlling terminal.
 
+    *keys* items are key tokens (see module docstring) or ``("expect", text)``
+    checkpoints: after the preceding key's output settles, *text* must appear
+    in the cumulative stripped output. On a miss the remaining keys are not
+    sent, the child is terminated, a diagnostic is written to stderr, and the
+    exit code is 65 (EX_DATAERR).
+
     Returns (stripped_output, exit_code).
     """
+    EX_DATAERR = 65
+
+    def _render(buf: bytes) -> str:
+        if raw:
+            return buf.replace(b"\r\n", b"\n").replace(b"\r", b"\n").decode("utf-8", errors="replace")
+        return strip_ansi(buf).decode("utf-8", errors="replace")
+
+    def _terminate(pid: int) -> None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            time.sleep(0.2)
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        _reap(pid, blocking=True)
     # If coverage instrumentation is requested, write a BASH_ENV startup script
     # that enables PS4 xtrace to the shared trace file before the child runs.
     # BASH_ENV is sourced by bash for every non-interactive shell invocation
@@ -180,13 +273,7 @@ def run(
     if coverage_file:
         fd, _bash_env = tempfile.mkstemp(suffix='.sh')
         with os.fdopen(fd, 'w') as f:
-            f.write(
-                f'exec 9>>"{coverage_file}"\n'
-                'export BASH_XTRACEFD=9\n'
-                "PS4='+${BASH_SOURCE:-?}:${LINENO} '\n"
-                'export PS4\n'
-                'set -x\n'
-            )
+            f.write(coverage_bash_env_script(coverage_file))
 
     try:
         # pty.fork() creates a PTY pair and forks.
@@ -204,6 +291,18 @@ def run(
                 pass
             if _bash_env:
                 os.environ["BASH_ENV"] = _bash_env
+            # Restore default signal dispositions before exec. This runner is
+            # frequently invoked from bash asynchronous contexts (test-runner
+            # worker pools), where SIGINT/SIGQUIT are set to SIG_IGN and the
+            # ignore is inherited across fork+exec. POSIX says a shell cannot
+            # trap a signal that was ignored on entry, so without this the
+            # guest TUI could never receive Ctrl-C. Raw sigaction is not
+            # subject to that restriction.
+            for _sig in (signal.SIGINT, signal.SIGQUIT):
+                try:
+                    signal.signal(_sig, signal.SIG_DFL)
+                except (ValueError, OSError, RuntimeError):
+                    pass
             os.execvp("bash", ["bash", script])
             # execvp replaces the process; this line is unreachable
             os._exit(1)
@@ -224,26 +323,43 @@ def run(
         output += _drain_until_stable(master, timeout=timeout)
 
         # Send keystrokes one at a time
+        exit_code = None
+        last_key = None
+        key_index = 0
         for key in keys:
+            if isinstance(key, tuple) and key[0] == "expect":
+                expected = key[1]
+                if expected not in _render(output):
+                    after = f"after key #{key_index} ({last_key!r})" if last_key is not None \
+                        else "in the initial render"
+                    tail = "\n".join(_render(output).splitlines()[-10:])
+                    sys.stderr.write(
+                        f"pty_run: --expect {expected!r} not satisfied {after}; "
+                        f"output so far (last lines):\n{tail}\n"
+                    )
+                    _terminate(pid)
+                    exit_code = EX_DATAERR
+                    break
+                continue
             # Check if child already exited
-            result = os.waitpid(pid, os.WNOHANG)
-            if result[0] != 0:
+            exit_code = _reap(pid)
+            if exit_code is not None:
                 break
             try:
                 os.write(master, parse_key(key))
             except OSError:
                 break
+            last_key = key
+            key_index += 1
             # PTY_DELAY is now the maximum wait per key, not a fixed sleep.
             output += _drain_until_stable(master, timeout=key_delay)
 
         # Wait for the child to exit (up to timeout)
         deadline = time.time() + timeout
-        exit_code = None
 
-        while time.time() < deadline:
-            result = os.waitpid(pid, os.WNOHANG)
-            if result[0] != 0:
-                exit_code = os.waitstatus_to_exitcode(result[1])
+        while exit_code is None and time.time() < deadline:
+            exit_code = _reap(pid)
+            if exit_code is not None:
                 break
             r, _, _ = select.select([master], [], [], 0.1)
             if r:
@@ -252,19 +368,20 @@ def run(
                     output += chunk
                 except OSError:
                     # Child closed the slave (exited)
-                    result = os.waitpid(pid, 0)
-                    exit_code = os.waitstatus_to_exitcode(result[1])
+                    exit_code = _reap(pid, blocking=True)
                     break
 
         if exit_code is None:
-            # Timeout — kill the child
+            # Timeout — kill the child. A kill raising ESRCH (died between
+            # checks) or the reap racing a prior reap must never wedge the
+            # runner: fall through to the bounded 124 regardless.
             try:
                 os.kill(pid, signal.SIGTERM)
                 time.sleep(0.5)
                 os.kill(pid, signal.SIGKILL)
             except OSError:
                 pass
-            os.waitpid(pid, 0)
+            _reap(pid, blocking=True)
             exit_code = 124  # conventional timeout exit code
 
         # Final drain
@@ -278,8 +395,7 @@ def run(
         if raw:
             result = output.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
         else:
-            result = ANSI_RE.sub(b"", output)
-            result = result.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+            result = strip_ansi(output)
 
         return result.decode("utf-8", errors="replace"), exit_code
 
@@ -297,7 +413,19 @@ def main():
         sys.exit(1)
 
     script = sys.argv[1]
-    keys = sys.argv[2:]
+    keys = []
+    argv = sys.argv[2:]
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--expect":
+            if i + 1 >= len(argv):
+                sys.stderr.write("pty_run: --expect requires a TEXT argument\n")
+                sys.exit(64)  # EX_USAGE
+            keys.append(("expect", argv[i + 1]))
+            i += 2
+        else:
+            keys.append(argv[i])
+            i += 1
 
     cols     = int(os.environ.get("PTY_COLS",    80))
     rows     = int(os.environ.get("PTY_ROWS",    24))
