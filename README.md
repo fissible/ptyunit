@@ -556,7 +556,7 @@ if (( count == 0 )); then
 fi
 ```
 
-> **How it works:** Each test file runs with `set -x` and a custom `PS4` that logs `file:line` to a trace file. A Python script then cross-references the trace against your source files. Works on bash 3.2 — no special tools needed.
+> **How it works:** Each test file runs with `set -x` and a custom `PS4` that logs `file:line` to a trace file via `BASH_XTRACEFD`. A Python script then cross-references the trace against your source files. No special tools needed — but **coverage requires bash 4.1+ on `PATH`** (`BASH_XTRACEFD` doesn't exist on macOS's stock 3.2; `brew install bash`). `coverage.sh` exits 2 with a message on older bash rather than reporting 0%. Your tests still run on 3.2 via `run.sh` — only measurement needs 4.1.
 
 ---
 

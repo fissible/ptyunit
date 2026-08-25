@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # ptyunit/coverage.sh — Bash code coverage via PS4 trace
 #
-# COMPATIBILITY: bash 3.2+ (macOS default).
+# COMPATIBILITY: this script runs on bash 3.2+, but tracing requires the
+# `bash` on PATH to be 4.1+ (BASH_XTRACEFD). On macOS: brew install bash.
+# The tests themselves still run on 3.2 via run.sh — only coverage needs 4.1.
 #
 # ── Usage ─────────────────────────────────────────────────────────────────────
 #
@@ -17,9 +19,13 @@
 # ── How it works ──────────────────────────────────────────────────────────────
 #
 # Runs each test file with set -x and a custom PS4 that logs file:line.
-# On bash 3.2 (macOS), BASH_XTRACEFD is not available, so xtrace goes to
-# stderr. The wrapper redirects stderr to the trace file and captures
-# stdout for test results.
+# Traces go to the trace file via BASH_XTRACEFD (fd 3) so they stay off
+# stderr — otherwise assert.sh's run() helper (2>&1) would capture PS4 lines
+# into $output. stderr is discarded; stdout is captured for test results.
+#
+# BASH_XTRACEFD does not exist before bash 4.1: older bash ignores it and
+# sends xtrace to the discarded stderr, so the trace file would stay empty
+# and every file would report 0%. We refuse to run in that case (#43).
 
 set -u
 
@@ -35,6 +41,17 @@ if [[ ! -f "$PTYUNIT_HOME/assert.sh" ]]; then
     exit 1
 fi
 export PTYUNIT_HOME
+
+# ── Require bash 4.1+ on PATH for tracing ────────────────────────────────────
+# Check the `bash` the wrapper below will invoke, not the one running this file.
+
+_cov_bash_ver=$(bash -c 'printf "%s%02d" "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}"' 2>/dev/null || echo 0)
+if (( 10#$_cov_bash_ver < 401 )); then
+    printf 'coverage: requires bash 4.1+ on PATH (BASH_XTRACEFD) — found %s at %s\n' \
+        "$(bash -c 'printf "%s" "$BASH_VERSION"' 2>/dev/null)" "$(command -v bash)" >&2
+    printf 'coverage: on macOS run "brew install bash"; tests themselves still run on bash 3.2 via run.sh\n' >&2
+    exit 2
+fi
 
 # ── Parse arguments ──────────────────────────────────────────────────────────
 
