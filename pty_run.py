@@ -84,6 +84,27 @@ ANSI_RE = re.compile(
 )
 
 
+def coverage_bash_env_script(coverage_file: str) -> str:
+    """Return the BASH_ENV startup script that enables PS4 xtrace into
+    *coverage_file* on fd 9.
+
+    Shared by pty_run.run() and pty_session.PTYSession so the two drivers
+    cannot drift (#44). The version guard matters: BASH_XTRACEFD arrived in
+    bash 4.1; on older bash `set -x` writes to stderr — which is the PTY —
+    and trace lines would pollute the captured output. The comparison is
+    (major > 4) or (major == 4 and minor >= 1), so bash 5.0 is included.
+    """
+    return (
+        f'exec 9>>"{coverage_file}"\n'
+        "if (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 1) )); then\n"
+        "    export BASH_XTRACEFD=9\n"
+        "    PS4='+${BASH_SOURCE:-?}:${LINENO} '\n"
+        "    export PS4\n"
+        "    set -x\n"
+        "fi\n"
+    )
+
+
 def parse_key(token: str) -> bytes:
     if token in NAMED_KEYS:
         return NAMED_KEYS[token]
@@ -180,13 +201,7 @@ def run(
     if coverage_file:
         fd, _bash_env = tempfile.mkstemp(suffix='.sh')
         with os.fdopen(fd, 'w') as f:
-            f.write(
-                f'exec 9>>"{coverage_file}"\n'
-                'export BASH_XTRACEFD=9\n'
-                "PS4='+${BASH_SOURCE:-?}:${LINENO} '\n"
-                'export PS4\n'
-                'set -x\n'
-            )
+            f.write(coverage_bash_env_script(coverage_file))
 
     try:
         # pty.fork() creates a PTY pair and forks.

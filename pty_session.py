@@ -27,7 +27,7 @@ import time
 
 import pyte
 
-from pty_run import ANSI_RE, NAMED_KEYS, parse_key  # noqa: F401 (re-exported)
+from pty_run import ANSI_RE, NAMED_KEYS, parse_key, coverage_bash_env_script  # noqa: F401 (re-exported)
 
 
 class Screen:
@@ -118,22 +118,14 @@ class PTYSession:
         # Coverage injection: if PTYUNIT_COVERAGE_FILE is set, write a BASH_ENV
         # startup script that enables PS4 xtrace into the trace file.
         # Must happen before fork so the child inherits the updated BASH_ENV.
-        # BASH_XTRACEFD requires bash 4.1+; the guard prevents set -x from
-        # redirecting to stderr (fd 2) on bash 3.2, which would corrupt PTY output.
+        # The script text (with its bash-4.1 BASH_XTRACEFD guard) is shared
+        # with pty_run.run() — see coverage_bash_env_script() there (#44).
         coverage_file = os.environ.get("PTYUNIT_COVERAGE_FILE")
         if coverage_file:
             self._prev_bash_env = os.environ.get("BASH_ENV")
             fd, self._bash_env_tmpfile = tempfile.mkstemp(suffix=".sh")
             with os.fdopen(fd, "w") as f:
-                f.write(
-                    f'exec 9>>"{coverage_file}"\n'
-                    "if [[ ${BASH_VERSINFO[0]} -ge 4 && ${BASH_VERSINFO[1]} -ge 1 ]]; then\n"
-                    "    export BASH_XTRACEFD=9\n"
-                    "    PS4='+${BASH_SOURCE:-?}:${LINENO} '\n"
-                    "    export PS4\n"
-                    "    set -x\n"
-                    "fi\n"
-                )
+                f.write(coverage_bash_env_script(coverage_file))
             os.environ["BASH_ENV"] = self._bash_env_tmpfile
 
         self._pid, self._master_fd = pty.fork()
