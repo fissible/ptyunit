@@ -84,6 +84,27 @@ ANSI_RE = re.compile(
 )
 
 
+# A child killed mid-sequence (timeout) can leave a truncated escape at the
+# very end of the buffer. ANSI_RE needs a final byte and cannot match it, so
+# the raw ESC would leak into "stripped" output (#45). This matches one
+# incomplete CSI / OSC / DCS-family / nF prefix — or a bare ESC — at end of data.
+_TRAILING_PARTIAL_RE = re.compile(
+    rb"\x1b(?:\[[0-?]*[ -/]*|\][^\x07\x1b]*|[PX^_][^\x1b]*|[ -/]*)?$"
+)
+
+
+def strip_ansi(data: bytes) -> bytes:
+    """Remove ANSI escape sequences and normalize line endings to \\n.
+
+    The trailing incomplete sequence must be dropped *before* ANSI_RE runs:
+    for a truncated OSC/DCS (no terminator) the ST-terminated arms fail and
+    the Fe catch-all would strip just `ESC ]` / `ESC P`, leaking the payload.
+    """
+    out = _TRAILING_PARTIAL_RE.sub(b"", data)
+    out = ANSI_RE.sub(b"", out)
+    return out.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
 def coverage_bash_env_script(coverage_file: str) -> str:
     """Return the BASH_ENV startup script that enables PS4 xtrace into
     *coverage_file* on fd 9.
@@ -293,8 +314,7 @@ def run(
         if raw:
             result = output.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
         else:
-            result = ANSI_RE.sub(b"", output)
-            result = result.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+            result = strip_ansi(output)
 
         return result.decode("utf-8", errors="replace"), exit_code
 
