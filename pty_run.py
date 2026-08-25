@@ -14,6 +14,13 @@ Keys:
     PAGE_UP PAGE_DOWN                     paging keys
     q, a, v, ...                          literal single characters
     \\x1b, \\r, \\n, ...                  hex escape sequences
+    --expect TEXT                         checkpoint: after the preceding key
+                                          settles, the stripped output so far
+                                          must contain TEXT; otherwise no more
+                                          keys are sent, the child is killed,
+                                          exit code is 65 and a diagnostic goes
+                                          to stderr. Before any key it checks
+                                          the initial render.
 
 Options (set via env vars):
     PTY_COLS=80     terminal width  (default: 80)
@@ -214,8 +221,32 @@ def run(
 ) -> tuple:
     """Run *script* in a PTY with proper controlling terminal.
 
+    *keys* items are key tokens (see module docstring) or ``("expect", text)``
+    checkpoints: after the preceding key's output settles, *text* must appear
+    in the cumulative stripped output. On a miss the remaining keys are not
+    sent, the child is terminated, a diagnostic is written to stderr, and the
+    exit code is 65 (EX_DATAERR).
+
     Returns (stripped_output, exit_code).
     """
+    EX_DATAERR = 65
+
+    def _render(buf: bytes) -> str:
+        if raw:
+            return buf.replace(b"\r\n", b"\n").replace(b"\r", b"\n").decode("utf-8", errors="replace")
+        return strip_ansi(buf).decode("utf-8", errors="replace")
+
+    def _terminate(pid: int) -> None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            time.sleep(0.2)
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            os.waitpid(pid, 0)
+        except OSError:
+            pass
     # If coverage instrumentation is requested, write a BASH_ENV startup script
     # that enables PS4 xtrace to the shared trace file before the child runs.
     # BASH_ENV is sourced by bash for every non-interactive shell invocation
@@ -262,23 +293,42 @@ def run(
         output += _drain_until_stable(master, timeout=timeout)
 
         # Send keystrokes one at a time
+        exit_code = None
+        last_key = None
+        key_index = 0
         for key in keys:
+            if isinstance(key, tuple) and key[0] == "expect":
+                expected = key[1]
+                if expected not in _render(output):
+                    after = f"after key #{key_index} ({last_key!r})" if last_key is not None \
+                        else "in the initial render"
+                    tail = "\n".join(_render(output).splitlines()[-10:])
+                    sys.stderr.write(
+                        f"pty_run: --expect {expected!r} not satisfied {after}; "
+                        f"output so far (last lines):\n{tail}\n"
+                    )
+                    _terminate(pid)
+                    exit_code = EX_DATAERR
+                    break
+                continue
             # Check if child already exited
             result = os.waitpid(pid, os.WNOHANG)
             if result[0] != 0:
+                exit_code = os.waitstatus_to_exitcode(result[1])
                 break
             try:
                 os.write(master, parse_key(key))
             except OSError:
                 break
+            last_key = key
+            key_index += 1
             # PTY_DELAY is now the maximum wait per key, not a fixed sleep.
             output += _drain_until_stable(master, timeout=key_delay)
 
         # Wait for the child to exit (up to timeout)
         deadline = time.time() + timeout
-        exit_code = None
 
-        while time.time() < deadline:
+        while exit_code is None and time.time() < deadline:
             result = os.waitpid(pid, os.WNOHANG)
             if result[0] != 0:
                 exit_code = os.waitstatus_to_exitcode(result[1])
@@ -334,7 +384,19 @@ def main():
         sys.exit(1)
 
     script = sys.argv[1]
-    keys = sys.argv[2:]
+    keys = []
+    argv = sys.argv[2:]
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--expect":
+            if i + 1 >= len(argv):
+                sys.stderr.write("pty_run: --expect requires a TEXT argument\n")
+                sys.exit(64)  # EX_USAGE
+            keys.append(("expect", argv[i + 1]))
+            i += 2
+        else:
+            keys.append(argv[i])
+            i += 1
 
     cols     = int(os.environ.get("PTY_COLS",    80))
     rows     = int(os.environ.get("PTY_ROWS",    24))

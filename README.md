@@ -504,6 +504,15 @@ Runs `bash <script>` inside a real pseudoterminal, sends each KEY as a keystroke
 
 Single characters (`a`, `q`, `1`) and hex escapes (`\x1b`) also work.
 
+**Checkpoints mid-sequence:** `--expect TEXT` between keys asserts that `TEXT` appears in the output so far *before* the next key is sent. On a miss the remaining keys are skipped, the script is terminated, the exit code is 65 and stderr names the failing checkpoint:
+
+```bash
+out=$(python3 tests/ptyunit/pty_run.py my_menu.sh DOWN --expect "> banana" ENTER)
+assert_eq "0" "$?"
+```
+
+This is the bash-only middle ground between fire-and-forget keys and `PTYSession` (below); it checks the text stream, not screen coordinates.
+
 ### Tuning
 
 | Variable | Default | What it controls |
