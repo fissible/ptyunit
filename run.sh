@@ -314,6 +314,37 @@ _run_py_job() {
     fi
 }
 
+# ── Dead-worker sweep ─────────────────────────────────────────────────────────
+# A worker returns its pool token and writes <name>.done as its last acts. If
+# the worker process is gone but never wrote .done, it died before reporting —
+# a fatal bash error in the runner, or a kill — and its token is lost. Without
+# this sweep the parent would block forever on the semaphore (files > jobs) or
+# silently drop the file from the totals (files <= jobs) (#55).
+#
+# Usage: _ptyunit_sweep_dead_workers <work_dir> <sem_fd> <col> [pid:file ...]
+# For each gone-without-.done worker: synthesize a FAIL (.out/.res/.raw) if it
+# left no .res, return one token to <sem_fd>, and mark it .swept so it is only
+# handled once. Returns 0 if anything was swept, 1 otherwise.
+_ptyunit_sweep_dead_workers() {
+    local work_dir="$1" _fd="$2" _col="$3"; shift 3
+    local _swept=1 _pair _pid _f _name
+    for _pair in "$@"; do
+        _pid="${_pair%%:*}"; _f="${_pair#*:}"; _name="${_f##*/}"
+        [[ -f "$work_dir/$_name.swept" ]] && continue
+        kill -0 "$_pid" 2>/dev/null && continue        # still running
+        [[ -f "$work_dir/$_name.done" ]] && continue   # finished normally
+        if [[ ! -f "$work_dir/$_name.res" ]]; then
+            printf '  %-*s ... %s (worker did not report)\n' "$_col" "$_name" "$_FAIL_LABEL" > "$work_dir/$_name.out"
+            printf '1 0 1 0.0\n' > "$work_dir/$_name.res"
+            printf 'worker did not report: the test worker process exited before writing results (killed, or a fatal error in the runner)\n' > "$work_dir/$_name.raw"
+        fi
+        : > "$work_dir/$_name.swept"
+        printf 'x' >&"$_fd"
+        _swept=0
+    done
+    return $_swept
+}
+
 # ── Suite runner: streaming worker pool ──────────────────────────────────────
 # Uses an fd-based semaphore for bash 3.2-compatible bounded parallelism.
 # Jobs start as soon as a slot opens — scanner and workers are interleaved.
@@ -378,8 +409,13 @@ _run_suite() {
     local i
     for (( i=0; i<_jobs; i++ )); do printf 'x' >&4; done
 
+    local _workers=()               # "pid:file" per started worker (#55)
     for f in "${files[@]}"; do
-        read -r -n1 -u4 _tok        # acquire slot (blocks when pool is full)
+        # Acquire a slot. The read blocks while the pool is full; every 2 s
+        # without a token, sweep for workers that died without returning one.
+        while ! read -r -n1 -u4 -t 2 _tok; do
+            _ptyunit_sweep_dead_workers "$work_dir" 4 "$_col" "${_workers[@]+"${_workers[@]}"}" || true
+        done
         # Check fail-fast after a worker finishes (token released)
         if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
             break
@@ -387,10 +423,13 @@ _run_suite() {
         (
             _run_job "$f" "$setUp_file" "$tearDown_file" "$work_dir" "$_col"
             printf 'x' >&4          # release slot
+            : > "$work_dir/${f##*/}.done"
         ) &
+        _workers+=("$!:$f")
     done
 
     wait                            # drain all remaining workers
+    _ptyunit_sweep_dead_workers "$work_dir" 4 "$_col" "${_workers[@]+"${_workers[@]}"}" || true
     exec 4>&-
 
     # Print pretty results and aggregate counts
@@ -480,18 +519,24 @@ _run_py_suite() {
     local i
     for (( i=0; i<_jobs; i++ )); do printf 'x' >&5; done
 
+    local _workers=()               # "pid:file" per started worker (#55)
     for f in "${files[@]}"; do
-        read -r -n1 -u5 _tok
+        while ! read -r -n1 -u5 -t 2 _tok; do
+            _ptyunit_sweep_dead_workers "$work_dir" 5 "$_col" "${_workers[@]+"${_workers[@]}"}" || true
+        done
         if (( _fail_fast )) && [[ -n "${_fail_sentinel:-}" ]] && [[ -f "$_fail_sentinel" ]]; then
             break
         fi
         (
             _run_py_job "$f" "$work_dir" "$_col"
             printf 'x' >&5
+            : > "$work_dir/${f##*/}.done"
         ) &
+        _workers+=("$!:$f")
     done
 
     wait
+    _ptyunit_sweep_dead_workers "$work_dir" 5 "$_col" "${_workers[@]+"${_workers[@]}"}" || true
     exec 5>&-
 
     for f in "${files[@]}"; do
