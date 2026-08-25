@@ -242,12 +242,20 @@ deploy_to_staging() { echo "deployed to staging"; }
 
 test_that "deploy succeeds"
 run deploy_to_staging
-assert_eq "0" "$status"
+assert_success
 assert_contains "$output" "deployed"
 assert_eq "deployed to staging" "${lines[0]}"
+
+test_that "deploy reports a bad token"
+run --separate-stderr deploy_to_staging --token bad
+assert_failure 2                 # or plain assert_failure for "any non-zero"
+assert_eq "" "$output"           # nothing on stdout…
+assert_contains "$stderr" "401"  # …the error went to stderr
 ```
 
-`run` captures everything at once: `$output` (stdout+stderr), `$status` (exit code), and `$lines` (array, one element per line).
+`run` captures everything at once: `$output` (stdout+stderr), `$status` (exit code), and `$lines` (array, one element per line). `assert_success` / `assert_failure [code]` check `$status` and print the captured output on failure.
+
+With `--separate-stderr`, `$output` holds only stdout and `$stderr` holds stderr. Without it, `$output` keeps both streams interleaved in the order they appeared and `$stderr` is empty — splitting can't preserve interleaving, so it's opt-in.
 
 > **Why this helps:** Without `run`, you'd write `out=$(cmd 2>&1); rc=$?` and manually split lines. With `run`, it's one call. The `$lines` array lets you check specific lines by index: `${lines[0]}` is the first line, `${lines[1]}` the second, etc.
 
