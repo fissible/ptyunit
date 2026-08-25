@@ -375,7 +375,7 @@ Failed files:
 | `-v` / `--verbose` | Show timing for every file |
 | `--version` | Print version and exit |
 
-> **How parallelism works:** Tests run in a streaming worker pool using an fd-based semaphore. This is compatible with bash 3.2 — no `wait -n` or GNU `parallel` required. Files start as soon as a slot opens rather than waiting for all files to be discovered first.
+> **How parallelism works:** Tests run in a streaming worker pool using an fd-based semaphore. This is compatible with bash 3.2 — no `wait -n` or GNU `parallel` required. Files start as soon as a slot opens rather than waiting for all files to be discovered first. A worker that dies before reporting (killed, or a fatal error in the runner) is detected within ~2 s, reported as `FAIL (worker did not report)`, and its slot is recycled — the suite never hangs on it.
 
 ### File-level setUp / tearDown
 
