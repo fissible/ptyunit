@@ -185,15 +185,46 @@ ptyunit/
 ## Session handoff notes
 > Update this section at the end of each session.
 
-_Last updated: 2026-03-26 (session 29)_
+_Last updated: 2026-08-24 (session 30 — review triage + implementation)_
 
-**617/617 assertions pass (unit). v1.5.3 current. Hardening complete. Consumer validated.**
+**724/724 unit + 37/37 integration assertions pass. v1.5.4 on main; 13 commits on branch `hardening/review-2026-08` (unmerged, unpushed).**
 
 ---
 
 ### Next session: pick up here
 
-**State:** All hardening-complete issues (#36–#38) closed. v1.5.3 released. No open tickets.
+**State:** An external review (2026-08-24) was verified against the source, filed as issues #39–#52, and **all 14 are implemented on `hardening/review-2026-08`** with TDD (failing self-test first for each). Two of the review's "exclusions" (no TAP/JUnit, no parallel runner) were wrong — both already existed — and were not filed. Two bugs the review missed were found while verifying it (#43, #44).
+
+**Completed this session (session 30), in commit order:**
+
+| Commit | Issues | What |
+|--------|--------|------|
+| `c5fa47b` | #39 #40 #42 | mock.sh: re-mock leak (save original once, dedupe registry, forget on unmock), name validation (`^[A-Za-z_][A-Za-z0-9_.-]*$`, rc 2), PATH cleanup strips only the mock bin dir |
+| `c290b9f` | #44 | `pty_run.coverage_bash_env_script()` shared with PTYSession; bash-4.1 guard on both drivers (was missing in pty_run → 3.2 child spewed xtrace into PTY); guard now includes bash 5.0 |
+| `8255220` | #43 | coverage.sh exits 2 on bash < 4.1 instead of reporting 0%; header comment and README corrected (no 3.2 fallback ever existed) |
+| `00dcba7` | #45 | `strip_ansi()` drops a trailing incomplete escape *before* ANSI_RE (Fe catch-all otherwise leaks truncated OSC/DCS payload) |
+| `c0e5320` | #41 | function-mock heredoc bodies run in-process (`source` inside a helper fn → `local`/`return` work); command mocks unchanged; docblock states which is which |
+| `38e03c5` | #46 | docs: PTY_INIT ignored since v1.5.2, scripts run via `bash <script>`, Windows = WSL only |
+| `154559b` | #49 | `test_each --sep CHAR`; no-escape and trailing-empty-field rules documented |
+| `3ba3fce` | #52 | `assert_float_eq/gt/lt/ge/le` (awk, tolerance, non-numeric = FAIL) |
+| `4e00ee6` | #48 | `run --separate-stderr` → `$stderr`; `assert_success` / `assert_failure [code]` |
+| `1cf54a8` | #47 | README: PTYSession section (API table, conftest.py line consumers need) |
+| `38c99b3` | #51 | `pty_run.py --expect TEXT` per-key checkpoint (exit 65; 64 on missing arg) |
+| `0bdb59b` | #50 | `Screen.text()`, `PTYSession.assert_snapshot()`, `pty_snapshot.py` CLI |
+
+**Decisions made:**
+- `$stderr` is populated only with `--separate-stderr` (bats convention) — splitting one run would lose stdout/stderr interleaving that existing `$output` assertions may rely on.
+- In-process function-mock bodies are the default, not opt-in: no consumer repo uses heredoc bodies (grepped shellframe/shellql/seed), so there is no downstream break. Bodies must use `return`, not `exit`.
+- coverage on bash 3.2: documented limitation + hard refusal, not a stderr-redirect fallback — that fallback would push PS4 lines into `run()`'s `$output`.
+- `run.sh --update-snapshots` flag **not** added; `PTYUNIT_UPDATE_SNAPSHOTS=1` env var is the documented path (keeps run.sh untouched).
+
+**Next steps (PM to schedule; worker can execute 1–3 on request):**
+1. Merge `hardening/review-2026-08` → `main` and push. Then close #39–#52 (commit messages reference but do not auto-close).
+2. Docker matrix (`bash tests/docker/run-matrix.sh` or CI on push) — everything was verified on macOS bash 3.2 + 5.x locally; Alpine busybox `awk` (#52) and `read -a` (#49) on 4.4 are the two things worth watching.
+3. Release: features added → **v1.6.0** (`bash release.sh minor`; CHANGELOG is git-cliff-generated). Then bump the Homebrew tap — consumers (shellframe, shellql, seed) install via Homebrew, so no submodule bumps.
+4. Follow-up candidates (not filed): `run.sh` could export `PYTHONPATH=$PTYUNIT_HOME` for pytest so consumers don't need the conftest.py line (#47 documents the workaround); `PTYSession.stdout` still uses bare `ANSI_RE` rather than `strip_ansi()` (kept for backward-compat — it does not normalize `\r\n`).
+
+**Previous state (session 29):** All hardening-complete issues (#36–#38) closed. v1.5.3 released. No open tickets.
 
 **Completed this session (session 29):**
 
