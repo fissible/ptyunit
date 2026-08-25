@@ -106,6 +106,8 @@ Literal characters (`y`, `q`, `1`) and hex escapes (`\x1b`) are also accepted.
 
 `PTY_INIT` is accepted but ignored: the first key is sent when the initial render has been quiet for 50 ms, so slow-starting scripts no longer need tuning.
 
+To assert on the *rendered screen* between keystrokes (which row is highlighted, what a cell contains) rather than on the final text, use `PTYSession` from `pty_session.py` — see "Assert on the rendered screen between keystrokes" in the README.
+
 ---
 
 ## Running tests

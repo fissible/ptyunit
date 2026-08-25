@@ -523,6 +523,51 @@ from pty_run import run
 output, exit_code = run("my_menu.sh", ["DOWN", "ENTER"], key_delay=0.1)
 ```
 
+### Assert on the rendered screen between keystrokes (`PTYSession`)
+
+`pty_run.py` is fire-and-forget: send keys, check the final text. When the assertion is about what's *rendered* after each key — which row is highlighted, what a cell contains — use `PTYSession`. It runs the script under a [pyte](https://github.com/selectel/pyte) terminal emulator and gives you the screen as a grid.
+
+```bash
+pip install -r tests/ptyunit/requirements-screen.txt   # pyte
+```
+
+```python
+# tests/integration/test_menu.py
+from pty_session import PTYSession
+
+def test_down_moves_highlight():
+    with PTYSession("my_menu.sh", cols=80, rows=24) as s:
+        assert s.screen.find_row("> apple") == 2
+        s.send("DOWN")
+        assert s.screen.find_row("> banana") == 3
+        s.send("ENTER")
+        assert s.exit_code == 0
+        assert "You selected: banana" in s.stdout
+```
+
+`send()` writes the key, waits until the screen has been quiet for `stable_window` seconds (default 0.05, bounded by `timeout`), and records the exit code if the script ended on that key.
+
+| | |
+|---|---|
+| `PTYSession(script, *, cols=80, rows=24, timeout=10.0, stable_window=0.05, env=None)` | Context manager. `env` is merged over the inherited environment. |
+| `session.send(key)` | Send one key (same names as `pty_run.py`), then wait for stability |
+| `session.wait_for_stable(window=None)` | Wait without sending — e.g. after a timer-driven redraw |
+| `session.screen` | The current `Screen` |
+| `session.exit_code` | Exit code, or `None` while the script is still running |
+| `session.stdout` | ANSI-stripped output so far |
+| `Screen.row(n)` | Text of row `n` (0-indexed), trailing spaces stripped |
+| `Screen.find_row(text)` | Index of the first row containing `text`, or `None` |
+| `Screen.cell(row, col)` / `Screen.cell_bold(row, col)` | One character / its bold flag at grid coordinates |
+
+Put `test_*.py` files in `tests/unit/` or `tests/integration/` — `run.sh` discovers them and runs each with `pytest`, counting results alongside the bash files. Add a `tests/conftest.py` so the import resolves from your repo:
+
+```python
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "ptyunit"))
+```
+
+> **Which one?** `pty_run.py` when "send keys, check the final text" is enough and you want to stay in bash. `PTYSession` when the assertion is about the rendered screen mid-sequence. Both use the same output-stable waiting, so neither needs sleeps.
+
 ---
 
 ## Code coverage
