@@ -15,12 +15,15 @@ Usage:
         assert session.screen.find_row("[ No ]") is not None
 """
 
+import difflib
 import fcntl
+import inspect
 import os
 import pty
 import select
 import signal
 import struct
+import sys
 import tempfile
 import termios
 import time
@@ -62,6 +65,18 @@ class Screen:
             if text in line:
                 return i
         return None
+
+    def text(self) -> str:
+        """The whole screen as one normalized string (#50).
+
+        Rows are right-stripped and joined with newlines; trailing blank rows
+        are dropped so a 24-row terminal showing 3 lines yields 3 lines. This
+        is the form stored by assert_snapshot().
+        """
+        rows = [line.rstrip() for line in self._screen.display]
+        while rows and not rows[-1]:
+            rows.pop()
+        return "\n".join(rows)
 
 
 class PTYSession:
@@ -298,3 +313,49 @@ class PTYSession:
     def stdout(self) -> str:
         """ANSI-stripped accumulated output. Valid at any point (partial mid-session)."""
         return ANSI_RE.sub(b"", self._raw_output).decode("utf-8", errors="replace")
+
+    def assert_snapshot(self, name: str, *, snapshot_dir: str = None,
+                        update: bool = False) -> None:
+        """Compare the current screen against a stored fixture (#50).
+
+        The fixture is ``<snapshot_dir>/<name>.txt`` holding Screen.text()
+        plus a trailing newline. *snapshot_dir* defaults to
+        ``$PTYUNIT_SNAPSHOT_DIR``, else ``__snapshots__/`` beside the calling
+        test file.
+
+        - No fixture yet: it is written, a notice goes to stderr, and the
+          assertion passes (Jest/insta convention).
+        - ``update=True`` or ``PTYUNIT_UPDATE_SNAPSHOTS=1``: the fixture is
+          rewritten unconditionally.
+        - Mismatch: AssertionError whose message is a unified diff
+          (fixture on the ``-`` side, live screen on the ``+`` side).
+        """
+        if snapshot_dir is None:
+            snapshot_dir = os.environ.get("PTYUNIT_SNAPSHOT_DIR")
+        if snapshot_dir is None:
+            caller = inspect.stack()[1].filename
+            snapshot_dir = os.path.join(os.path.dirname(os.path.abspath(caller)), "__snapshots__")
+        update = update or os.environ.get("PTYUNIT_UPDATE_SNAPSHOTS") == "1"
+
+        path = os.path.join(snapshot_dir, f"{name}.txt")
+        actual = self.screen.text() + "\n"
+
+        if update or not os.path.exists(path):
+            verb = "updated" if os.path.exists(path) else "wrote new"
+            os.makedirs(snapshot_dir, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(actual)
+            sys.stderr.write(f"ptyunit: {verb} snapshot {path}\n")
+            return
+
+        with open(path, encoding="utf-8") as f:
+            expected = f.read()
+        if expected != actual:
+            diff = "".join(difflib.unified_diff(
+                expected.splitlines(True), actual.splitlines(True),
+                fromfile=path, tofile="<live screen>",
+            ))
+            raise AssertionError(
+                f"screen snapshot mismatch: {path}\n"
+                f"(rerun with PTYUNIT_UPDATE_SNAPSHOTS=1 to accept the new screen)\n{diff}"
+            )

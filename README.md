@@ -577,6 +577,28 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "ptyunit"))
 
 > **Which one?** `pty_run.py` when "send keys, check the final text" is enough and you want to stay in bash. `PTYSession` when the assertion is about the rendered screen mid-sequence. Both use the same output-stable waiting, so neither needs sleeps.
 
+### Snapshot the whole screen
+
+For visual regression, compare the rendered screen against a stored fixture instead of asserting row by row:
+
+```python
+def test_main_menu_layout():
+    with PTYSession("my_menu.sh") as s:
+        s.send("DOWN")
+        s.assert_snapshot("main-menu-second-item")
+```
+
+From bash, the same thing without writing Python:
+
+```bash
+test_that "main menu renders"
+assert_true python3 tests/ptyunit/pty_snapshot.py my_menu.sh main-menu DOWN
+```
+
+- The fixture is `__snapshots__/<name>.txt` — beside the calling test file in Python, or `./__snapshots__/` (override with `PTYUNIT_SNAPSHOT_DIR`) from bash. It holds `Screen.text()`: rows right-stripped, trailing blank rows dropped. Commit these files.
+- **First run** writes the fixture and passes (a notice goes to stderr). **Mismatch** fails with a unified diff — fixture on `-`, live screen on `+`.
+- **Accepting a change:** `PTYUNIT_UPDATE_SNAPSHOTS=1 bash tests/ptyunit/run.sh`, or `pty_snapshot.py --update …` / `assert_snapshot(name, update=True)` for one fixture. Review the diff in `git` before committing.
+
 ---
 
 ## Code coverage
