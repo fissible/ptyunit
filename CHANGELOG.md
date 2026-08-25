@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+## [1.6.1] - 2026-08-25
+
+### Fixed
+- Stop flaky "in 1.0 secs" on coarse clocks; share elapsed computation (#54)
+- Report a worker that dies before writing results instead of hanging (#55) (#56)
 ## [1.6.0] - 2026-08-25
 
 ### Hardening
