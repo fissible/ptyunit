@@ -62,6 +62,7 @@ import tempfile
 import termios
 import time
 
+
 NAMED_KEYS = {
     "UP":        b"\x1b[A",
     "DOWN":      b"\x1b[B",
@@ -207,6 +208,26 @@ def _drain_until_stable(fd: int, window: float = 0.05, timeout: float = 10.0) ->
     return buf
 
 
+def _reap(pid: int, blocking: bool = False, max_wait: float = 5.0):
+    """Reap *pid*, returning its exit code, or None if it has not exited.
+
+    Never raises or blocks indefinitely: ECHILD/ESRCH return None, and
+    blocking=True polls with WNOHANG for at most *max_wait* seconds before
+    giving up, so a wedged child can never hang the runner.
+    """
+    deadline = time.monotonic() + max_wait
+    while True:
+        try:
+            waited, status = os.waitpid(pid, os.WNOHANG)
+        except (ChildProcessError, OSError):
+            return None
+        if waited != 0:
+            return os.waitstatus_to_exitcode(status)
+        if not blocking or time.monotonic() >= deadline:
+            return None
+        time.sleep(0.01)
+
+
 def run(
     script: str,
     keys: list,
@@ -243,10 +264,7 @@ def run(
             os.kill(pid, signal.SIGKILL)
         except OSError:
             pass
-        try:
-            os.waitpid(pid, 0)
-        except OSError:
-            pass
+        _reap(pid, blocking=True)
     # If coverage instrumentation is requested, write a BASH_ENV startup script
     # that enables PS4 xtrace to the shared trace file before the child runs.
     # BASH_ENV is sourced by bash for every non-interactive shell invocation
@@ -273,6 +291,18 @@ def run(
                 pass
             if _bash_env:
                 os.environ["BASH_ENV"] = _bash_env
+            # Restore default signal dispositions before exec. This runner is
+            # frequently invoked from bash asynchronous contexts (test-runner
+            # worker pools), where SIGINT/SIGQUIT are set to SIG_IGN and the
+            # ignore is inherited across fork+exec. POSIX says a shell cannot
+            # trap a signal that was ignored on entry, so without this the
+            # guest TUI could never receive Ctrl-C. Raw sigaction is not
+            # subject to that restriction.
+            for _sig in (signal.SIGINT, signal.SIGQUIT):
+                try:
+                    signal.signal(_sig, signal.SIG_DFL)
+                except (ValueError, OSError, RuntimeError):
+                    pass
             os.execvp("bash", ["bash", script])
             # execvp replaces the process; this line is unreachable
             os._exit(1)
@@ -312,9 +342,8 @@ def run(
                     break
                 continue
             # Check if child already exited
-            result = os.waitpid(pid, os.WNOHANG)
-            if result[0] != 0:
-                exit_code = os.waitstatus_to_exitcode(result[1])
+            exit_code = _reap(pid)
+            if exit_code is not None:
                 break
             try:
                 os.write(master, parse_key(key))
@@ -329,9 +358,8 @@ def run(
         deadline = time.time() + timeout
 
         while exit_code is None and time.time() < deadline:
-            result = os.waitpid(pid, os.WNOHANG)
-            if result[0] != 0:
-                exit_code = os.waitstatus_to_exitcode(result[1])
+            exit_code = _reap(pid)
+            if exit_code is not None:
                 break
             r, _, _ = select.select([master], [], [], 0.1)
             if r:
@@ -340,19 +368,20 @@ def run(
                     output += chunk
                 except OSError:
                     # Child closed the slave (exited)
-                    result = os.waitpid(pid, 0)
-                    exit_code = os.waitstatus_to_exitcode(result[1])
+                    exit_code = _reap(pid, blocking=True)
                     break
 
         if exit_code is None:
-            # Timeout — kill the child
+            # Timeout — kill the child. A kill raising ESRCH (died between
+            # checks) or the reap racing a prior reap must never wedge the
+            # runner: fall through to the bounded 124 regardless.
             try:
                 os.kill(pid, signal.SIGTERM)
                 time.sleep(0.5)
                 os.kill(pid, signal.SIGKILL)
             except OSError:
                 pass
-            os.waitpid(pid, 0)
+            _reap(pid, blocking=True)
             exit_code = 124  # conventional timeout exit code
 
         # Final drain

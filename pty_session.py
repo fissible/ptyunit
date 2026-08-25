@@ -156,6 +156,14 @@ class PTYSession:
                 merged = {**os.environ, **self._env}
                 os.execvpe("bash", ["bash", self._script], merged)
             else:
+                # Restore default signal dispositions before exec (see
+                # pty_run.run): inherited SIG_IGN from async bash contexts
+                # would otherwise make the guest TUI unable to trap Ctrl-C.
+                for _sig in (signal.SIGINT, signal.SIGQUIT):
+                    try:
+                        signal.signal(_sig, signal.SIG_DFL)
+                    except (ValueError, OSError, RuntimeError):
+                        pass
                 os.execvp("bash", ["bash", self._script])
             os._exit(1)  # unreachable — execvp replaces the process
 
